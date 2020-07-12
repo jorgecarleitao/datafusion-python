@@ -1,0 +1,12 @@
+[package]
+name = "rust-python-example"
+version = "0.1.0"
+authors = ["Jorge C. Leitao <jorgecarleitao@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+pyo3 = { version = "0.11", features = ["extension-module"] }
+
+[lib]
+name = "pyo3_pure"
+crate-type = ["cdylib"]
