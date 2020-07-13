@@ -58,7 +58,7 @@ class TestCase(unittest.TestCase):
 
         # group by
         result = ctx.sql("SELECT (a > 50), COUNT(a) FROM t GROUP BY CAST((a > 10.0) AS int)", 20)
-        expected = {'CAST': numpy.array([0, 1]), 'COUNT': numpy.array([50, 50])}
+        expected = {'CAST': numpy.array([1, 0]), 'COUNT': numpy.array([50, 50])}
         numpy.testing.assert_equal(expected, result)
 
         # order by
