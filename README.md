@@ -29,9 +29,7 @@ Bootstrap:
 
 ```bash
 # fetch arrow
-# this repo is temporary; waiting for some PRs to be merged in the main repo
-git clone git@github.com:jorgecarleitao/arrow.git
-cd arrow && git checkout py && cd ..
+git clone git@github.com:apache/arrow.git
 # fetch this repo
 git clone git@github.com:jorgecarleitao/datafusion-python.git
 
