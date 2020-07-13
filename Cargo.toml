@@ -6,7 +6,10 @@ edition = "2018"
 
 [dependencies]
 pyo3 = { version = "0.11", features = ["extension-module"] }
+datafusion = { path = "../arrow/rust/datafusion" }
+arrow = { path = "../arrow/rust/arrow" }
+thiserror = "^1.0"
 
 [lib]
-name = "pyo3_pure"
+name = "datafusion"
 crate-type = ["cdylib"]
