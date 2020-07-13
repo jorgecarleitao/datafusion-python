@@ -41,36 +41,43 @@ fn wrap<T>(a: Result<T, ExecutionError>) -> Result<T, DataStoreError> {
 }
 
 macro_rules! to_py_numpy {
-    ($ARRAY:ident, $ARRAY_TY:ident) => {{
+    ($BATCHES:ident, $COLUMN_INDEX:ident, $ARRAY_TY:ident) => {{
+        let mut values = Vec::with_capacity($BATCHES.len() * $BATCHES[0].num_rows());
+        for batch in $BATCHES {
+            let column = batch.column($COLUMN_INDEX);
+            let casted = column.as_any().downcast_ref::<array::$ARRAY_TY>().unwrap();
+            for i in 0..column.len() {
+                values.push(casted.value(i));
+            }
+        };
         let gil = pyo3::Python::acquire_gil();
-        let casted = $ARRAY.as_any().downcast_ref::<array::$ARRAY_TY>().unwrap();
-        let mut values = Vec::with_capacity(casted.len());
-        for i in 0..$ARRAY.len() {
-            values.push(casted.value(i));
-        }
         Ok(PyObject::from(PyArray1::from_iter(gil.python(), values)))
     }};
 }
 
-fn to_py(record: &RecordBatch) -> Result<HashMap<String, PyObject>, ExecutionError> {
+fn to_py(batches: &Vec<RecordBatch>) -> Result<HashMap<String, PyObject>, ExecutionError> {
     let mut map: HashMap<String, PyObject> = HashMap::new();
 
-    for column_index in 0..record.schema().fields().len() {
-        let column = record.column(column_index);
-        let value = match column.data_type() {
+    let schema = batches[0].schema();
+
+    for column_index in 0..schema.fields().len() {
+        let column_name = schema.field(column_index).name().clone();
+        let column_type = schema.field(column_index).data_type();
+
+        let value = match column_type {
             //DataType::Null: no NullArray in arrow
-            DataType::Boolean => to_py_numpy!(column, BooleanArray),
-            DataType::Int8 => to_py_numpy!(column, Int8Array),
-            DataType::Int16 => to_py_numpy!(column, Int16Array),
-            DataType::Int32 => to_py_numpy!(column, Int32Array),
-            DataType::Int64 => to_py_numpy!(column, Int64Array),
-            DataType::UInt8 => to_py_numpy!(column, UInt8Array),
-            DataType::UInt16 => to_py_numpy!(column, UInt16Array),
-            DataType::UInt32 => to_py_numpy!(column, UInt32Array),
-            DataType::UInt64 => to_py_numpy!(column, UInt64Array),
+            DataType::Boolean => to_py_numpy!(batches, column_index, BooleanArray),
+            DataType::Int8 => to_py_numpy!(batches, column_index, Int8Array),
+            DataType::Int16 => to_py_numpy!(batches, column_index, Int16Array),
+            DataType::Int32 => to_py_numpy!(batches, column_index, Int32Array),
+            DataType::Int64 => to_py_numpy!(batches, column_index, Int64Array),
+            DataType::UInt8 => to_py_numpy!(batches, column_index, UInt8Array),
+            DataType::UInt16 => to_py_numpy!(batches, column_index, UInt16Array),
+            DataType::UInt32 => to_py_numpy!(batches, column_index, UInt32Array),
+            DataType::UInt64 => to_py_numpy!(batches, column_index, UInt64Array),
             //DataType::Float16 is not represented in rust arrow
-            DataType::Float32 => to_py_numpy!(column, Float32Array),
-            DataType::Float64 => to_py_numpy!(column, Float64Array),
+            DataType::Float32 => to_py_numpy!(batches, column_index, Float32Array),
+            DataType::Float64 => to_py_numpy!(batches, column_index, Float64Array),
             /*
             None of the below are currently supported by rust-numpy
             DataType::Timestamp(_, _) => {}
@@ -95,7 +102,7 @@ fn to_py(record: &RecordBatch) -> Result<HashMap<String, PyObject>, ExecutionErr
                 format!("Type {:?} is still not valid.", other).to_owned(),
             )),
         };
-        map.insert(record.schema().field(column_index).name().clone(), value?);
+        map.insert(column_name, value?);
     }
     Ok(map)
 }
@@ -111,8 +118,7 @@ impl ExecutionContext {
 
     fn sql(&mut self, query: &str, batch_size: usize) -> PyResult<HashMap<String, PyObject>> {
         let batches = wrap(self.ctx.sql(query, batch_size))?;
-        // this is wrong: we should iterate over all batches
-        Ok(wrap(to_py(&batches[0]))?)
+        Ok(wrap(to_py(&batches))?)
     }
 
     fn register_parquet(&mut self, name: &str, path: &str) -> PyResult<()> {

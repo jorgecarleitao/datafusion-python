@@ -10,10 +10,12 @@ import datafusion
 import pyarrow.parquet
 
 
-def _write_parquet(path):
-    a = numpy.concatenate([numpy.random.normal(0, 0.01, size=50), numpy.random.normal(50, 0.01, size=50)])
+def _data():
+    return numpy.concatenate([numpy.random.normal(0, 0.01, size=50), numpy.random.normal(50, 0.01, size=50)])
 
-    table = pyarrow.Table.from_arrays([pyarrow.array(a)], names=['a'])
+
+def _write_parquet(path):
+    table = pyarrow.Table.from_arrays([pyarrow.array(_data())], names=['a'])
     pyarrow.parquet.write_table(table, path)
     return path
 
@@ -58,7 +60,7 @@ class TestCase(unittest.TestCase):
 
         # group by
         result = ctx.sql("SELECT (a > 50), COUNT(a) FROM t GROUP BY CAST((a > 10.0) AS int)", 20)
-        expected = {'CAST': numpy.array([1, 0]), 'COUNT': numpy.array([50, 50])}
+        expected = {'CAST': numpy.array([0, 1]), 'COUNT': numpy.array([50, 50])}
         numpy.testing.assert_equal(expected, result)
 
         # order by
@@ -103,6 +105,6 @@ class TestCase(unittest.TestCase):
 
         # reproduce the same data and apply abs() to it
         numpy.random.seed(1)
-        expected = {'tt': numpy.abs(numpy.random.normal(0, 0.01, size=20))}
+        expected = {'tt': numpy.abs(_data())}
 
         numpy.testing.assert_equal(expected, result)
