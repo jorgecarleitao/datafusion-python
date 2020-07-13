@@ -5,11 +5,15 @@ authors = ["Jorge C. Leitao <jorgecarleitao@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-pyo3 = { version = "0.11", features = ["extension-module"] }
+pyo3 = { version = "0.10.1", features = ["extension-module"] }
 datafusion = { path = "../arrow/rust/datafusion" }
 arrow = { path = "../arrow/rust/arrow" }
 thiserror = "^1.0"
+numpy = "0.9.0"
 
 [lib]
 name = "datafusion"
 crate-type = ["cdylib"]
+
+[package.metadata.maturin]
+requires-dist = ["numpy>=1,<2"]
