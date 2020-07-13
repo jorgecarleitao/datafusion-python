@@ -1,19 +1,23 @@
-use pyo3::prelude::*;
-use pyo3::PyErr;
+use std::sync::Arc;
+
 use pyo3::exceptions;
+use pyo3::prelude::*;
+use pyo3::types::PyTuple;
+use pyo3::PyErr;
 
 use numpy::PyArray1;
 
-use std::collections::{HashSet, HashMap};
+use std::collections::{HashMap, HashSet};
 
-use datafusion::execution::context::ExecutionContext as _ExecutionContext;
 use datafusion::error::ExecutionError;
+use datafusion::execution::context::ExecutionContext as _ExecutionContext;
+use datafusion::execution::physical_plan::udf::ScalarFunction;
 
-use thiserror::Error;
-use arrow::record_batch::RecordBatch;
-use arrow::array::Array;
-use arrow::datatypes::DataType;
 use arrow::array;
+use arrow::array::Array;
+use arrow::datatypes::{DataType, Field};
+use arrow::record_batch::RecordBatch;
+use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum DataStoreError {
@@ -27,14 +31,13 @@ impl From<DataStoreError> for PyErr {
     }
 }
 
-
 #[pyclass]
 struct ExecutionContext {
-    ctx: _ExecutionContext
+    ctx: _ExecutionContext,
 }
 
 fn wrap<T>(a: Result<T, ExecutionError>) -> Result<T, DataStoreError> {
-    return Ok(a?)
+    return Ok(a?);
 }
 
 macro_rules! to_py_numpy {
@@ -88,19 +91,21 @@ fn to_py(record: &RecordBatch) -> Result<HashMap<String, PyObject>, ExecutionErr
             DataType::Struct(_) => {}
             DataType::Union(_) => {}
             DataType::Dictionary(_, _) => {}*/
-            other => Err(ExecutionError::NotImplemented(format!("Type {:?} is still not valid.", other).to_owned())),
+            other => Err(ExecutionError::NotImplemented(
+                format!("Type {:?} is still not valid.", other).to_owned(),
+            )),
         };
         map.insert(record.schema().field(column_index).name().clone(), value?);
-    };
+    }
     Ok(map)
 }
 
 #[pymethods]
 impl ExecutionContext {
     #[new]
-     fn new() -> Self {
+    fn new() -> Self {
         ExecutionContext {
-            ctx: _ExecutionContext::new()
+            ctx: _ExecutionContext::new(),
         }
     }
 
@@ -112,6 +117,46 @@ impl ExecutionContext {
 
     fn register_parquet(&mut self, name: &str, path: &str) -> PyResult<()> {
         wrap(self.ctx.register_parquet(name, path))?;
+        Ok(())
+    }
+
+    fn register_udf(&mut self, name: &str, func: PyObject) -> PyResult<()> {
+        self.ctx.register_udf(ScalarFunction::new(
+            name.into(),
+            vec![Field::new("n", DataType::Float64, true)],
+            DataType::Float64,
+            Arc::new(
+                move |args: &[array::ArrayRef]| -> Result<array::ArrayRef, ExecutionError> {
+                    let values = &args[0]
+                        .as_any()
+                        .downcast_ref::<array::Float64Array>()
+                        .ok_or_else(|| ExecutionError::General(format!("Bla.").to_owned()))?;
+
+                    // get GIL
+                    let gil = pyo3::Python::acquire_gil();
+                    let py = gil.python();
+
+                    let any = func.as_ref(py);
+
+                    let mut builder = array::Float64Builder::new(values.len());
+                    for i in 0..values.len() {
+                        if values.is_null(i) {
+                            builder.append_null()?;
+                        } else {
+                            let value = any.call(PyTuple::new(py, vec![values.value(i)]), None);
+                            let value = match value {
+                                Ok(n) => Ok(n.extract::<f64>().unwrap()),
+                                Err(data) => {
+                                    Err(ExecutionError::General(format!("{:?}", data).to_owned()))
+                                }
+                            }?;
+                            builder.append_value(value)?;
+                        }
+                    }
+                    Ok(Arc::new(builder.finish()))
+                },
+            ),
+        ));
         Ok(())
     }
 

@@ -88,3 +88,21 @@ class TestCase(unittest.TestCase):
 
         # can execute, which implies that we can cast
         ctx.sql(f'SELECT {select} FROM t', 20)
+
+    def test_udf(self):
+        ctx = datafusion.ExecutionContext()
+        
+        ctx.register_udf("iden", lambda x: abs(x))
+
+        # freeze results
+        numpy.random.seed(1)
+        path = _write_parquet(os.path.join(self.test_dir, 'a.parquet'))
+        ctx.register_parquet("t", path)
+
+        result = ctx.sql("SELECT iden(a) AS tt FROM t", 20)
+
+        # reproduce the same data and apply abs() to it
+        numpy.random.seed(1)
+        expected = {'tt': numpy.abs(numpy.random.normal(0, 0.01, size=20))}
+
+        numpy.testing.assert_equal(expected, result)
