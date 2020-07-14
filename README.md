@@ -12,9 +12,10 @@ We lock the GIL to convert the results back to Python, when building numpy array
 
 * [x] Add support to Python UDFs
 * [x] Add support to nulls
+* [x] Add support to numeric types
 * [x] Add support to strings
 * [x] Add support to datetime (`datetime64`)
-* [ ] Add support to timedelta
+* [x] Add support to timedelta
 * [ ] Add CI/CD, including publish to Mac and manylinux via official docker
 * [ ] benchmarks
 

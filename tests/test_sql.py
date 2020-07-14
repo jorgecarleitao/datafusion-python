@@ -31,10 +31,17 @@ def _data_datetime(f):
     data = numpy.array([
         numpy.datetime64('2018-08-18 23:25'),
         numpy.datetime64('2019-08-18 23:25'),
-        numpy.datetime64("NaT")
+        numpy.datetime64('NaT')
     ])
     data = numpy.array(data, dtype=f'datetime64[{f}]')
     return data
+
+def _data_timedelta(f):
+    return numpy.array([
+        numpy.timedelta64(10, f),
+        numpy.timedelta64(1, f),
+        numpy.timedelta64('NaT', f)
+    ])
 
 def _write_parquet(path, data):
     table = pyarrow.Table.from_arrays([pyarrow.array(data)], names=['a'])
@@ -175,9 +182,7 @@ class TestCase(unittest.TestCase):
 
         numpy.testing.assert_equal(data, result['tt'])
 
-    def _test_datetime(self, f):
-        data = _data_datetime(f)
-
+    def _test_data(self, data):
         ctx = datafusion.ExecutionContext()
 
         # write to disk
@@ -189,18 +194,23 @@ class TestCase(unittest.TestCase):
         numpy.testing.assert_equal(data, result['tt'])
 
     def test_datetime_ms(self):
-        self._test_datetime('ms')
+        self._test_data(_data_datetime('ms'))
     
     def test_datetime_ns(self):
-        self._test_datetime('ns')
+        self._test_data(_data_datetime('ns'))
 
     def test_datetime_us(self):
-        self._test_datetime('us')
+        self._test_data(_data_datetime('us'))
 
     def test_datetime_s(self):
-        self._test_datetime('s')
+        self._test_data(_data_datetime('s'))
 
     # See ARROW-9461
     @unittest.expectedFailure
     def test_datetime_d(self):
-        self._test_datetime('D')
+        self._test_data(_data_datetime('D'))
+
+    # See ARROW-6780: pyarrow bindings for C++ do not support writing this to parquet
+    @unittest.expectedFailure
+    def test_timedelta_ns(self):
+        self._test_data(_data_timedelta('ns'))

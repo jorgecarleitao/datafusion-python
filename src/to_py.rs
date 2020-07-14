@@ -12,6 +12,7 @@ use arrow::datatypes::DataType;
 use arrow::record_batch::RecordBatch;
 
 
+/// Maps a numpy dtype to a PyObject denoting its null representation.
 fn py_null(numpy_type: &str, py: &Python, numpy: &PyModule) -> Result<PyObject, ExecutionError> {
     match numpy_type {
         "O" => Ok(py.None()),
@@ -20,6 +21,10 @@ fn py_null(numpy_type: &str, py: &Python, numpy: &PyModule) -> Result<PyObject, 
         "datetime64[ms]" => Ok(PyObject::from(numpy.call("datetime64", ("NaT",), None).unwrap())),
         "datetime64[ns]" => Ok(PyObject::from(numpy.call("datetime64", ("NaT",), None).unwrap())),
         "datetime64[D]" => Ok(PyObject::from(numpy.call("datetime64", ("NaT",), None).unwrap())),
+        "timedelta64[ms]" => Ok(PyObject::from(numpy.call("timedelta64", ("NaT",), None).unwrap())),
+        "timedelta64[us]" => Ok(PyObject::from(numpy.call("timedelta64", ("NaT",), None).unwrap())),
+        "timedelta64[ns]" => Ok(PyObject::from(numpy.call("timedelta64", ("NaT",), None).unwrap())),
+        "timedelta64[s]" => Ok(PyObject::from(numpy.call("timedelta64", ("NaT",), None).unwrap())),
         _ => Err(ExecutionError::NotImplemented(
             format!("Unknown null value of type \"{}\" ", numpy_type).to_owned(),
         ))
@@ -94,17 +99,23 @@ pub fn to_py(batches: &Vec<RecordBatch>) -> Result<HashMap<String, PyObject>, Ex
             DataType::Float32 => to_py_numpy!(batches, column_index, Float32Array),
             DataType::Float64 => to_py_numpy!(batches, column_index, Float64Array),
             // ignoring time zones for now...
+            DataType::Timestamp(TimeUnit::Second, _) => to_py_numpy_generic!(batches, column_index, TimestampSecondArray, "datetime64[s]"),
             DataType::Timestamp(TimeUnit::Millisecond, _) => to_py_numpy_generic!(batches, column_index, TimestampMillisecondArray, "datetime64[ms]"),
             DataType::Timestamp(TimeUnit::Microsecond, _) => to_py_numpy_generic!(batches, column_index, TimestampMicrosecondArray, "datetime64[us]"),
             DataType::Timestamp(TimeUnit::Nanosecond, _) => to_py_numpy_generic!(batches, column_index, TimestampNanosecondArray, "datetime64[ns]"),
-            DataType::Timestamp(TimeUnit::Second, _) => to_py_numpy_generic!(batches, column_index, TimestampSecondArray, "datetime64[s]"),
             DataType::Date32(DateUnit::Day) => to_py_numpy_generic!(batches, column_index, Date32Array, "datetime64[D]"),
             DataType::Date64(DateUnit::Millisecond) => to_py_numpy_generic!(batches, column_index, Date64Array, "datetime64[ms]"),
+            DataType::Duration(TimeUnit::Second) => to_py_numpy_generic!(batches, column_index, DurationSecondArray, "timedelta64[s]"),
+            DataType::Duration(TimeUnit::Millisecond) => to_py_numpy_generic!(batches, column_index, DurationMillisecondArray, "timedelta64[ms]"),
+            DataType::Duration(TimeUnit::Microsecond) => to_py_numpy_generic!(batches, column_index, DurationMicrosecondArray, "timedelta64[us]"),
+            DataType::Duration(TimeUnit::Nanosecond) => to_py_numpy_generic!(batches, column_index, DurationNanosecondArray, "timedelta64[ns]"),
             /*
-            None of the below are currently supported by rust-numpy
+            No native type in numpy
             DataType::Time32(_) => {}
             DataType::Time64(_) => {}
-            DataType::Duration(_) => {}
+            */
+            /*
+            None of the below are currently supported by rust-numpy
             DataType::Interval(_) => {}
             DataType::Binary => {}
             DataType::FixedSizeBinary(_) => {}
