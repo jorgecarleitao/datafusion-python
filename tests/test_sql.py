@@ -20,6 +20,11 @@ def _data_with_nulls():
     data[mask==0] = numpy.NaN
     return data
 
+
+def _data_bool():
+    return numpy.array([0, 1], dtype="?")
+
+
 def _data_string():
     data = numpy.random.choice(["aaa" , "b"], size=5)
     data = numpy.array(data, dtype='O')
@@ -232,3 +237,6 @@ class TestCase(unittest.TestCase):
 
     def test_binary_other(self):
         self._test_data(_data_binary_other())
+
+    def test_data_bool(self):
+        self._test_data(_data_bool())

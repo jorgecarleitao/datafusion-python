@@ -9,7 +9,6 @@ pyo3 = { version = "0.10.1", features = ["extension-module"] }
 datafusion = { path = "../arrow/rust/datafusion" }
 arrow = { path = "../arrow/rust/arrow" }
 thiserror = "^1.0"
-numpy = "0.9.0"
 
 [lib]
 name = "datafusion"

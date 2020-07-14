@@ -6,7 +6,7 @@ numpy arrays.
 
 Being written in rust, this code has strong assumptions about thread safety and lack of memory leaks.
 
-We lock the GIL to convert the results back to Python, when building numpy arrays.
+We lock the GIL to convert the results back to numpy arrays and while running UFDs.
 
 ## TODOs
 
@@ -20,9 +20,10 @@ We lock the GIL to convert the results back to Python, when building numpy array
 * [ ] Add CI/CD, including publish to Mac and manylinux via official docker
 * [ ] benchmarks
 
-Known issues: 
+Known limitations:
 
-* timezones are currently stripped form datetimes.
+* timezones are stripped from datetimes as numpy does not support timezone-aware dates
+* null values are discarded for types that do not support them (int and uint)
 
 ## How to install
 
