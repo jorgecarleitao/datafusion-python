@@ -7,7 +7,7 @@ use numpy::PyArray1;
 use std::collections::HashMap;
 
 use arrow::array;
-use arrow::datatypes::TimeUnit;
+use arrow::datatypes::{TimeUnit, DateUnit};
 use arrow::datatypes::DataType;
 use arrow::record_batch::RecordBatch;
 
@@ -19,6 +19,7 @@ fn py_null(numpy_type: &str, py: &Python, numpy: &PyModule) -> Result<PyObject, 
         "datetime64[us]" => Ok(PyObject::from(numpy.call("datetime64", ("NaT",), None).unwrap())),
         "datetime64[ms]" => Ok(PyObject::from(numpy.call("datetime64", ("NaT",), None).unwrap())),
         "datetime64[ns]" => Ok(PyObject::from(numpy.call("datetime64", ("NaT",), None).unwrap())),
+        "datetime64[D]" => Ok(PyObject::from(numpy.call("datetime64", ("NaT",), None).unwrap())),
         _ => Err(ExecutionError::NotImplemented(
             format!("Unknown null value of type \"{}\" ", numpy_type).to_owned(),
         ))
@@ -97,10 +98,10 @@ pub fn to_py(batches: &Vec<RecordBatch>) -> Result<HashMap<String, PyObject>, Ex
             DataType::Timestamp(TimeUnit::Microsecond, _) => to_py_numpy_generic!(batches, column_index, TimestampMicrosecondArray, "datetime64[us]"),
             DataType::Timestamp(TimeUnit::Nanosecond, _) => to_py_numpy_generic!(batches, column_index, TimestampNanosecondArray, "datetime64[ns]"),
             DataType::Timestamp(TimeUnit::Second, _) => to_py_numpy_generic!(batches, column_index, TimestampSecondArray, "datetime64[s]"),
+            DataType::Date32(DateUnit::Day) => to_py_numpy_generic!(batches, column_index, Date32Array, "datetime64[D]"),
+            DataType::Date64(DateUnit::Millisecond) => to_py_numpy_generic!(batches, column_index, Date64Array, "datetime64[ms]"),
             /*
             None of the below are currently supported by rust-numpy
-            DataType::Date32(_) => {}
-            DataType::Date64(_) => {}
             DataType::Time32(_) => {}
             DataType::Time64(_) => {}
             DataType::Duration(_) => {}

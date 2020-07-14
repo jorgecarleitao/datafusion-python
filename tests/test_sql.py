@@ -199,3 +199,8 @@ class TestCase(unittest.TestCase):
 
     def test_datetime_s(self):
         self._test_datetime('s')
+
+    # See ARROW-9461
+    @unittest.expectedFailure
+    def test_datetime_d(self):
+        self._test_datetime('D')
