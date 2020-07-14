@@ -14,7 +14,6 @@ use datafusion::execution::context::ExecutionContext as _ExecutionContext;
 use datafusion::execution::physical_plan::udf::ScalarFunction;
 
 use arrow::array;
-use arrow::array::Array;
 use arrow::datatypes::{DataType, Field};
 use arrow::record_batch::RecordBatch;
 use thiserror::Error;
@@ -107,6 +106,23 @@ fn to_py(batches: &Vec<RecordBatch>) -> Result<HashMap<String, PyObject>, Execut
     Ok(map)
 }
 
+macro_rules! to_primitive {
+    ($VALUES:ident, $ARRAY_TY:ident) => {{
+        $VALUES.as_any().downcast_ref::<array::$ARRAY_TY>().ok_or_else(|| ExecutionError::General(format!("Bla.").to_owned()))?
+    }};
+}
+
+macro_rules! to_native {
+    ($VALUES:ident, $BUILDER:ident, $TY:ident, $SIZE_HINT:ident) => {{
+        let mut builder = array::$BUILDER::new($SIZE_HINT);
+        $VALUES
+            .iter()
+            .map(|x| x.extract::<$TY>().unwrap())
+            .for_each(|x| builder.append_value(x).unwrap());
+        Ok(Arc::new(builder.finish()))
+    }};
+}
+
 #[pymethods]
 impl ExecutionContext {
     #[new]
@@ -126,40 +142,70 @@ impl ExecutionContext {
         Ok(())
     }
 
-    fn register_udf(&mut self, name: &str, func: PyObject) -> PyResult<()> {
+    fn register_udf(&mut self, name: &str, func: PyObject, args_types: Vec<&str>, return_type: &str) -> PyResult<()> {
+        // map strings for declared types to cases from DataType
+        let args_types: Vec<DataType> = wrap(args_types.iter().map(|x| types::data_type(&x)).collect::<Result<Vec<DataType>, ExecutionError>>())?;
+        let return_type = wrap(types::data_type(return_type))?;
+        let return_type1 = return_type.clone();
+
+        // construct the argument fields. Their name does not matter. 2x because one needs to be copied to ScalarFunction
+        let fields = args_types.iter().map(|x| Field::new("n", x.clone(), true)).collect();
+        let fields1: Vec<Field> = args_types.iter().map(|x| Field::new("n", x.clone(), true)).collect();
+
         self.ctx.register_udf(ScalarFunction::new(
             name.into(),
-            vec![Field::new("n", DataType::Float64, true)],
-            DataType::Float64,
+            fields,
+            return_type,
             Arc::new(
                 move |args: &[array::ArrayRef]| -> Result<array::ArrayRef, ExecutionError> {
-                    let values = &args[0]
-                        .as_any()
-                        .downcast_ref::<array::Float64Array>()
-                        .ok_or_else(|| ExecutionError::General(format!("Bla.").to_owned()))?;
+                    let capacity = args[0].len();
 
                     // get GIL
                     let gil = pyo3::Python::acquire_gil();
                     let py = gil.python();
 
-                    let any = func.as_ref(py);
+                    // for each row
+                    // 1. cast args to PyTuple
+                    // 2. call function
+                    // 3. cast the arguments back to Rust-Native
 
-                    let mut builder = array::Float64Builder::new(values.len());
-                    for i in 0..values.len() {
-                        if values.is_null(i) {
-                            builder.append_null()?;
-                        } else {
-                            let value = any.call(PyTuple::new(py, vec![values.value(i)]), None);
-                            let value = match value {
-                                Ok(n) => Ok(n.extract::<f64>().unwrap()),
-                                Err(data) => {
-                                    Err(ExecutionError::General(format!("{:?}", data).to_owned()))
-                                }
+                    let mut final_values = Vec::with_capacity(capacity);
+                    for i in 0..args[0].len() {
+                        // 1. cast args to PyTuple
+                        let mut values = Vec::with_capacity(fields1.len());
+                        for field_i in 0..fields1.len() {
+                            let arg = &args[field_i];
+                            let values_i = match fields1[field_i].data_type() {
+                                DataType::Float64 => Ok(to_primitive!(arg, Float64Array).value(i).to_object(py)),
+                                DataType::Float32 => Ok(to_primitive!(arg, Float32Array).value(i).to_object(py)),
+                                DataType::Int32 => Ok(to_primitive!(arg, Int32Array).value(i).to_object(py)),
+                                DataType::UInt32 => Ok(to_primitive!(arg, UInt32Array).value(i).to_object(py)),
+                                other => Err(ExecutionError::NotImplemented(format!("Datatype \"{:?}\" is still not implemented.", other).to_owned())),
                             }?;
-                            builder.append_value(value)?;
-                        }
+                            values.push(values_i);
+                        };
+                        let values = PyTuple::new(py, values);
+
+                        // 2. call function
+                        let any = func.as_ref(py);
+                        let value = any.call(values, None);
+                        let value = match value {
+                            Ok(n) => Ok(n),
+                            Err(data) => {
+                                Err(ExecutionError::General(format!("{:?}", data).to_owned()))
+                            }
+                        }?;
+                        final_values.push(value);
                     }
-                    Ok(Arc::new(builder.finish()))
+
+                    // 3. cast the arguments back to Rust-Native
+                    match &return_type1 {
+                        DataType::Float64 => to_native!(final_values, Float64Builder, f64, capacity),
+                        DataType::Float32 => to_native!(final_values, Float32Builder, f32, capacity),
+                        DataType::Int32 => to_native!(final_values, Int32Builder, i32, capacity),
+                        DataType::Int64 => to_native!(final_values, Int64Builder, i64, capacity),
+                        other => Err(ExecutionError::NotImplemented(format!("Datatype \"{:?}\" is still not implemented as a return type.", other).to_owned())),
+                    }
                 },
             ),
         ));
@@ -175,5 +221,11 @@ impl ExecutionContext {
 fn datafusion(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<ExecutionContext>()?;
 
+    for data_type in types::DATA_TYPES {
+        m.add(data_type, data_type)?;
+    }
+
     Ok(())
 }
+
+mod types;

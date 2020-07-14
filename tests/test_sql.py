@@ -93,8 +93,8 @@ class TestCase(unittest.TestCase):
 
     def test_udf(self):
         ctx = datafusion.ExecutionContext()
-        
-        ctx.register_udf("iden", lambda x: abs(x))
+
+        ctx.register_udf("iden", lambda x: abs(x), ['float64'], 'float64')
 
         # freeze results
         numpy.random.seed(1)
