@@ -109,17 +109,14 @@ pub fn to_py(batches: &Vec<RecordBatch>) -> Result<HashMap<String, PyObject>, Ex
             DataType::Duration(TimeUnit::Millisecond) => to_py_numpy_generic!(batches, column_index, DurationMillisecondArray, "timedelta64[ms]"),
             DataType::Duration(TimeUnit::Microsecond) => to_py_numpy_generic!(batches, column_index, DurationMicrosecondArray, "timedelta64[us]"),
             DataType::Duration(TimeUnit::Nanosecond) => to_py_numpy_generic!(batches, column_index, DurationNanosecondArray, "timedelta64[ns]"),
+            DataType::Binary => to_py_numpy_generic!(batches, column_index, BinaryArray, "u8"),
+            DataType::FixedSizeBinary(byte_width) => to_py_numpy_generic!(batches, column_index, BinaryArray, &*format!("u{}", byte_width * 8)),
+            DataType::LargeBinary => to_py_numpy_generic!(batches, column_index, LargeBinaryArray, "u8"),
             /*
             No native type in numpy
             DataType::Time32(_) => {}
             DataType::Time64(_) => {}
-            */
-            /*
-            None of the below are currently supported by rust-numpy
             DataType::Interval(_) => {}
-            DataType::Binary => {}
-            DataType::FixedSizeBinary(_) => {}
-            DataType::LargeBinary => {}
             */
             DataType::Utf8 => to_py_numpy_generic!(batches, column_index, StringArray, "O"),
             DataType::LargeUtf8 => to_py_numpy_generic!(batches, column_index, StringArray, "O"),

@@ -13,6 +13,7 @@ We lock the GIL to convert the results back to Python, when building numpy array
 * [x] Add support to Python UDFs
 * [x] Add support to nulls
 * [x] Add support to numeric types
+* [x] Add support to binary types
 * [x] Add support to strings
 * [x] Add support to datetime (`datetime64`)
 * [x] Add support to timedelta

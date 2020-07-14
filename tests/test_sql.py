@@ -43,6 +43,18 @@ def _data_timedelta(f):
         numpy.timedelta64('NaT', f)
     ])
 
+def _data_binary():
+    return numpy.array([
+        1, 0, 0
+    ], dtype='u8')
+
+
+def _data_binary_other():
+    return numpy.array([
+        1, 0, 0
+    ], dtype='u4')
+
+
 def _write_parquet(path, data):
     table = pyarrow.Table.from_arrays([pyarrow.array(data)], names=['a'])
     pyarrow.parquet.write_table(table, path)
@@ -214,3 +226,9 @@ class TestCase(unittest.TestCase):
     @unittest.expectedFailure
     def test_timedelta_ns(self):
         self._test_data(_data_timedelta('ns'))
+
+    def test_binary(self):
+        self._test_data(_data_binary())
+
+    def test_binary_other(self):
+        self._test_data(_data_binary_other())
