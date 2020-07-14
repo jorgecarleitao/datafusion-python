@@ -11,7 +11,7 @@ We lock the GIL to convert the results back to Python, when building numpy array
 ## TODOs
 
 * [x] Add support to Python UDFs
-* [ ] Add support to nulls
+* [x] Add support to nulls
 * [ ] Add support to timedates, delta times and string types
 * [ ] Add CI/CD, including publish to Mac and manylinux via official docker
 * [ ] benchmarks

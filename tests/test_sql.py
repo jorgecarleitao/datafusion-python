@@ -14,8 +14,15 @@ def _data():
     return numpy.concatenate([numpy.random.normal(0, 0.01, size=50), numpy.random.normal(50, 0.01, size=50)])
 
 
-def _write_parquet(path):
-    table = pyarrow.Table.from_arrays([pyarrow.array(_data())], names=['a'])
+def _data_with_nulls():
+    data = numpy.random.normal(0, 0.01, size=50)
+    mask = numpy.random.randint(0, 1, size=50)
+    data[mask==0] = numpy.NaN
+    return data
+
+
+def _write_parquet(path, data):
+    table = pyarrow.Table.from_arrays([pyarrow.array(data)], names=['a'])
     pyarrow.parquet.write_table(table, path)
     return path
 
@@ -45,7 +52,7 @@ class TestCase(unittest.TestCase):
         ctx = datafusion.ExecutionContext()
 
         # single column, "a"
-        path = _write_parquet(os.path.join(self.test_dir, 'a.parquet'))
+        path = _write_parquet(os.path.join(self.test_dir, 'a.parquet'), _data())
         ctx.register_parquet("t", path)
 
         self.assertEqual(ctx.tables(), {"t"})
@@ -74,7 +81,7 @@ class TestCase(unittest.TestCase):
         """
         ctx = datafusion.ExecutionContext()
 
-        path = _write_parquet(os.path.join(self.test_dir, 'a.parquet'))
+        path = _write_parquet(os.path.join(self.test_dir, 'a.parquet'), _data())
         ctx.register_parquet("t", path)
 
         valid_types = [
@@ -92,19 +99,50 @@ class TestCase(unittest.TestCase):
         ctx.sql(f'SELECT {select} FROM t', 20)
 
     def test_udf(self):
+        data = _data()
+
         ctx = datafusion.ExecutionContext()
 
         ctx.register_udf("iden", lambda x: abs(x), ['float64'], 'float64')
 
-        # freeze results
-        numpy.random.seed(1)
-        path = _write_parquet(os.path.join(self.test_dir, 'a.parquet'))
+        # write to disk
+        path = _write_parquet(os.path.join(self.test_dir, 'a.parquet'), data)
         ctx.register_parquet("t", path)
 
         result = ctx.sql("SELECT iden(a) AS tt FROM t", 20)
 
-        # reproduce the same data and apply abs() to it
-        numpy.random.seed(1)
-        expected = {'tt': numpy.abs(_data())}
+        # compute the same operation here
+        expected = {'tt': numpy.abs(data)}
+
+        numpy.testing.assert_equal(expected, result)
+
+    def test_nulls(self):
+        data = _data_with_nulls()
+
+        ctx = datafusion.ExecutionContext()
+
+        # write to disk
+        path = _write_parquet(os.path.join(self.test_dir, 'a.parquet'), data)
+        ctx.register_parquet("t", path)
+
+        result = ctx.sql("SELECT a AS tt FROM t", 20)
+
+        numpy.testing.assert_equal(data, result['tt'])
+
+    def test_nulls_udf(self):
+        data = _data_with_nulls()
+
+        ctx = datafusion.ExecutionContext()
+
+        ctx.register_udf("iden", lambda x: abs(x), ['float64'], 'float64')
+
+        # write to disk
+        path = _write_parquet(os.path.join(self.test_dir, 'a.parquet'), data)
+        ctx.register_parquet("t", path)
+
+        result = ctx.sql("SELECT iden(a) AS tt FROM t", 20)
+
+        # compute the same operation here
+        expected = {'tt': numpy.abs(data)}
 
         numpy.testing.assert_equal(expected, result)
