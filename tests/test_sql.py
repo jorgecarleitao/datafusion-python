@@ -16,10 +16,16 @@ def _data():
 
 def _data_with_nulls():
     data = numpy.random.normal(0, 0.01, size=50)
-    mask = numpy.random.randint(0, 1, size=50)
+    mask = numpy.random.randint(0, 2, size=50)
     data[mask==0] = numpy.NaN
     return data
 
+def _data_string():
+    data = numpy.random.choice(["aaa" , "b"], size=5)
+    data = numpy.array(data, dtype='O')
+    mask = numpy.random.randint(0, 2, size=5)
+    data[mask==0] = None
+    return data
 
 def _write_parquet(path, data):
     table = pyarrow.Table.from_arrays([pyarrow.array(data)], names=['a'])
@@ -146,3 +152,19 @@ class TestCase(unittest.TestCase):
         expected = {'tt': numpy.abs(data)}
 
         numpy.testing.assert_equal(expected, result)
+
+    def test_strings(self):
+        data = _data_string()
+
+        ctx = datafusion.ExecutionContext()
+
+        # write to disk
+        path = _write_parquet(os.path.join(self.test_dir, 'a.parquet'), data)
+        ctx.register_parquet("t", path)
+
+        result = ctx.sql("SELECT a AS tt FROM t", 20)
+
+        # known issue: null values are converted to ''
+        data[data==None] = ''
+
+        numpy.testing.assert_equal(data, result['tt'])

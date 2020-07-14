@@ -12,9 +12,14 @@ We lock the GIL to convert the results back to Python, when building numpy array
 
 * [x] Add support to Python UDFs
 * [x] Add support to nulls
-* [ ] Add support to timedates, delta times and string types
+* [x] Add support to strings
+* [ ] Add support to timedates, delta times
 * [ ] Add CI/CD, including publish to Mac and manylinux via official docker
 * [ ] benchmarks
+
+Known issues:
+
+* null values of string arrays are converted to empty strings.
 
 ## How to install
 

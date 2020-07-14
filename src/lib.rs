@@ -5,8 +5,6 @@ use pyo3::prelude::*;
 use pyo3::types::PyTuple;
 use pyo3::PyErr;
 
-use numpy::PyArray1;
-
 use std::collections::{HashMap, HashSet};
 
 use datafusion::error::ExecutionError;
@@ -15,7 +13,6 @@ use datafusion::execution::physical_plan::udf::ScalarFunction;
 
 use arrow::array;
 use arrow::datatypes::{DataType, Field};
-use arrow::record_batch::RecordBatch;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -37,73 +34,6 @@ struct ExecutionContext {
 
 fn wrap<T>(a: Result<T, ExecutionError>) -> Result<T, DataStoreError> {
     return Ok(a?);
-}
-
-macro_rules! to_py_numpy {
-    ($BATCHES:ident, $COLUMN_INDEX:ident, $ARRAY_TY:ident) => {{
-        let mut values = Vec::with_capacity($BATCHES.len() * $BATCHES[0].num_rows());
-        for batch in $BATCHES {
-            let column = batch.column($COLUMN_INDEX);
-            let casted = column.as_any().downcast_ref::<array::$ARRAY_TY>().unwrap();
-            for i in 0..column.len() {
-                values.push(casted.value(i));
-            }
-        };
-        let gil = pyo3::Python::acquire_gil();
-        Ok(PyObject::from(PyArray1::from_iter(gil.python(), values)))
-    }};
-}
-
-fn to_py(batches: &Vec<RecordBatch>) -> Result<HashMap<String, PyObject>, ExecutionError> {
-    let mut map: HashMap<String, PyObject> = HashMap::new();
-
-    let schema = batches[0].schema();
-
-    for column_index in 0..schema.fields().len() {
-        let column_name = schema.field(column_index).name().clone();
-        let column_type = schema.field(column_index).data_type();
-
-        let value = match column_type {
-            //DataType::Null: no NullArray in arrow
-            DataType::Boolean => to_py_numpy!(batches, column_index, BooleanArray),
-            DataType::Int8 => to_py_numpy!(batches, column_index, Int8Array),
-            DataType::Int16 => to_py_numpy!(batches, column_index, Int16Array),
-            DataType::Int32 => to_py_numpy!(batches, column_index, Int32Array),
-            DataType::Int64 => to_py_numpy!(batches, column_index, Int64Array),
-            DataType::UInt8 => to_py_numpy!(batches, column_index, UInt8Array),
-            DataType::UInt16 => to_py_numpy!(batches, column_index, UInt16Array),
-            DataType::UInt32 => to_py_numpy!(batches, column_index, UInt32Array),
-            DataType::UInt64 => to_py_numpy!(batches, column_index, UInt64Array),
-            //DataType::Float16 is not represented in rust arrow
-            DataType::Float32 => to_py_numpy!(batches, column_index, Float32Array),
-            DataType::Float64 => to_py_numpy!(batches, column_index, Float64Array),
-            /*
-            None of the below are currently supported by rust-numpy
-            DataType::Timestamp(_, _) => {}
-            DataType::Date32(_) => {}
-            DataType::Date64(_) => {}
-            DataType::Time32(_) => {}
-            DataType::Time64(_) => {}
-            DataType::Duration(_) => {}
-            DataType::Interval(_) => {}
-            DataType::Binary => {}
-            DataType::FixedSizeBinary(_) => {}
-            DataType::LargeBinary => {}
-            DataType::Utf8 => {}
-            DataType::LargeUtf8 => {}
-            DataType::List(_) => {}
-            DataType::FixedSizeList(_, _) => {}
-            DataType::LargeList(_) => {}
-            DataType::Struct(_) => {}
-            DataType::Union(_) => {}
-            DataType::Dictionary(_, _) => {}*/
-            other => Err(ExecutionError::NotImplemented(
-                format!("Type {:?} is still not valid.", other).to_owned(),
-            )),
-        };
-        map.insert(column_name, value?);
-    }
-    Ok(map)
 }
 
 macro_rules! to_primitive {
@@ -134,7 +64,7 @@ impl ExecutionContext {
 
     fn sql(&mut self, query: &str, batch_size: usize) -> PyResult<HashMap<String, PyObject>> {
         let batches = wrap(self.ctx.sql(query, batch_size))?;
-        Ok(wrap(to_py(&batches))?)
+        Ok(wrap(to_py::to_py(&batches))?)
     }
 
     fn register_parquet(&mut self, name: &str, path: &str) -> PyResult<()> {
@@ -229,3 +159,4 @@ fn datafusion(_py: Python, m: &PyModule) -> PyResult<()> {
 }
 
 mod types;
+mod to_py;
