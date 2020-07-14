@@ -7,30 +7,51 @@ use numpy::PyArray1;
 use std::collections::HashMap;
 
 use arrow::array;
+use arrow::datatypes::TimeUnit;
 use arrow::datatypes::DataType;
 use arrow::record_batch::RecordBatch;
 
 
-fn to_py_str(batches: &Vec<RecordBatch>, column_index: usize) -> Result<PyObject, ExecutionError> {
-    let mut values = Vec::with_capacity(batches.len() * batches[0].num_rows());
-    for batch in batches {
-        let column = batch.column(column_index);
-        let casted = column.as_any().downcast_ref::<array::StringArray>().unwrap();
-        for i in 0..column.len() {
-            values.push(casted.value(i));
-        }
-    };
-    let gil = pyo3::Python::acquire_gil();
-    let py = gil.python();
-
-    // use a Python call to construct the array, since rust-numpy does not support this type yet.
-    let numpy = PyModule::import(py, "numpy").expect("Numpy is not installed.");
-    let values = numpy.call1("array", (values, "O")).expect("asas");
-
-    Ok(PyObject::from(values))
+fn py_null(numpy_type: &str, py: &Python, numpy: &PyModule) -> Result<PyObject, ExecutionError> {
+    match numpy_type {
+        "O" => Ok(py.None()),
+        "datetime64[s]" => Ok(PyObject::from(numpy.call("datetime64", ("NaT",), None).unwrap())),
+        "datetime64[us]" => Ok(PyObject::from(numpy.call("datetime64", ("NaT",), None).unwrap())),
+        "datetime64[ms]" => Ok(PyObject::from(numpy.call("datetime64", ("NaT",), None).unwrap())),
+        "datetime64[ns]" => Ok(PyObject::from(numpy.call("datetime64", ("NaT",), None).unwrap())),
+        _ => Err(ExecutionError::NotImplemented(
+            format!("Unknown null value of type \"{}\" ", numpy_type).to_owned(),
+        ))
+    }
 }
 
-//numpy.array
+
+macro_rules! to_py_numpy_generic {
+    ($BATCHES:ident, $COLUMN_INDEX:ident, $ARRAY_TY:ident, $NUMPY_TY:expr) => {{
+        let mut values = Vec::with_capacity($BATCHES.len() * $BATCHES[0].num_rows());
+        let mut mask = Vec::with_capacity($BATCHES.len() * $BATCHES[0].num_rows());
+        for batch in $BATCHES {
+            let column = batch.column($COLUMN_INDEX);
+            let casted = column.as_any().downcast_ref::<array::$ARRAY_TY>().unwrap();
+            for i in 0..column.len() {
+                mask.push(column.is_null(i));
+                values.push(casted.value(i));
+            }
+        };
+        let gil = pyo3::Python::acquire_gil();
+        let py = gil.python();
+
+        // use a Python call to construct the array, since rust-numpy does not support this type yet.
+        let numpy = PyModule::import(py, "numpy").expect("Numpy is not installed.");
+        let values = numpy.call1("array", (values, $NUMPY_TY)).expect("asas");
+
+        // apply null mask to the values.
+        let values = numpy.call1("where", (mask, py_null($NUMPY_TY, &py, &numpy)?, values)).expect("asas");
+
+        Ok(PyObject::from(values))
+    }};
+}
+
 
 macro_rules! to_py_numpy {
     ($BATCHES:ident, $COLUMN_INDEX:ident, $ARRAY_TY:ident) => {{
@@ -71,9 +92,13 @@ pub fn to_py(batches: &Vec<RecordBatch>) -> Result<HashMap<String, PyObject>, Ex
             //DataType::Float16 is not represented in rust arrow
             DataType::Float32 => to_py_numpy!(batches, column_index, Float32Array),
             DataType::Float64 => to_py_numpy!(batches, column_index, Float64Array),
+            // ignoring time zones for now...
+            DataType::Timestamp(TimeUnit::Millisecond, _) => to_py_numpy_generic!(batches, column_index, TimestampMillisecondArray, "datetime64[ms]"),
+            DataType::Timestamp(TimeUnit::Microsecond, _) => to_py_numpy_generic!(batches, column_index, TimestampMicrosecondArray, "datetime64[us]"),
+            DataType::Timestamp(TimeUnit::Nanosecond, _) => to_py_numpy_generic!(batches, column_index, TimestampNanosecondArray, "datetime64[ns]"),
+            DataType::Timestamp(TimeUnit::Second, _) => to_py_numpy_generic!(batches, column_index, TimestampSecondArray, "datetime64[s]"),
             /*
             None of the below are currently supported by rust-numpy
-            DataType::Timestamp(_, _) => {}
             DataType::Date32(_) => {}
             DataType::Date64(_) => {}
             DataType::Time32(_) => {}
@@ -84,8 +109,8 @@ pub fn to_py(batches: &Vec<RecordBatch>) -> Result<HashMap<String, PyObject>, Ex
             DataType::FixedSizeBinary(_) => {}
             DataType::LargeBinary => {}
             */
-            DataType::Utf8 => to_py_str(batches, column_index),
-            DataType::LargeUtf8 => to_py_str(batches, column_index),
+            DataType::Utf8 => to_py_numpy_generic!(batches, column_index, StringArray, "O"),
+            DataType::LargeUtf8 => to_py_numpy_generic!(batches, column_index, StringArray, "O"),
             /*
             DataType::List(_) => {}
             DataType::FixedSizeList(_, _) => {}

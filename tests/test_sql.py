@@ -27,6 +27,15 @@ def _data_string():
     data[mask==0] = None
     return data
 
+def _data_datetime(f):
+    data = numpy.array([
+        numpy.datetime64('2018-08-18 23:25'),
+        numpy.datetime64('2019-08-18 23:25'),
+        numpy.datetime64("NaT")
+    ])
+    data = numpy.array(data, dtype=f'datetime64[{f}]')
+    return data
+
 def _write_parquet(path, data):
     table = pyarrow.Table.from_arrays([pyarrow.array(data)], names=['a'])
     pyarrow.parquet.write_table(table, path)
@@ -164,7 +173,29 @@ class TestCase(unittest.TestCase):
 
         result = ctx.sql("SELECT a AS tt FROM t", 20)
 
-        # known issue: null values are converted to ''
-        data[data==None] = ''
+        numpy.testing.assert_equal(data, result['tt'])
+
+    def _test_datetime(self, f):
+        data = _data_datetime(f)
+
+        ctx = datafusion.ExecutionContext()
+
+        # write to disk
+        path = _write_parquet(os.path.join(self.test_dir, 'a.parquet'), data)
+        ctx.register_parquet("t", path)
+
+        result = ctx.sql("SELECT a AS tt FROM t", 20)
 
         numpy.testing.assert_equal(data, result['tt'])
+
+    def test_datetime_ms(self):
+        self._test_datetime('ms')
+    
+    def test_datetime_ns(self):
+        self._test_datetime('ns')
+
+    def test_datetime_us(self):
+        self._test_datetime('us')
+
+    def test_datetime_s(self):
+        self._test_datetime('s')
