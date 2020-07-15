@@ -6,24 +6,37 @@ numpy arrays.
 
 Being written in rust, this code has strong assumptions about thread safety and lack of memory leaks.
 
-We lock the GIL to convert the results back to numpy arrays and while running UFDs.
-
-## TODOs
-
-* [x] Add support to Python UDFs
-* [x] Add support to nulls
-* [x] Add support to numeric types
-* [x] Add support to binary types
-* [x] Add support to strings
-* [x] Add support to datetime (`datetime64`)
-* [x] Add support to timedelta
-* [ ] Add CI/CD, including publish to Mac and manylinux via official docker
-* [ ] benchmarks
+We lock the GIL to convert the results back to numpy arrays and to run UFDs.
 
 Known limitations:
 
 * timezones are stripped from datetimes as numpy does not support timezone-aware dates
-* null values are discarded for types that do not support them (int and uint)
+* null value information is discarded for types that do not support them (int and uint) and instead contain the default value of the type (typically a 0)
+
+## How to use it
+
+Simple usage:
+
+```
+import datafusion
+
+
+ctx = datafusion.ExecutionContext()
+
+ctx.register_parquet('t', path)
+
+result = ctx.sql('SELECT (a > 50), COUNT(a) FROM t GROUP BY CAST((a > 10.0) AS int)', 1000)
+# result is a dictionary with two keys, CAST and COUNT, whose values are numpy arrays.
+```
+
+UDF usage:
+
+```
+# name, function, input types, output types
+ctx.register_udf('my_abs', lambda x: abs(x), ['float64'], 'float64')
+
+result = ctx.sql("SELECT my_abs(a) FROM t", 1000)
+```
 
 ## How to install
 
@@ -58,3 +71,15 @@ Whenever rust code changes (your changes or via git pull):
 venv/bin/maturin develop
 venv/bin/python -m unittest discover tests
 ```
+
+## TODOs
+
+* [x] Add support to Python UDFs
+* [x] Add support to nulls
+* [x] Add support to numeric types
+* [x] Add support to binary types
+* [x] Add support to strings
+* [x] Add support to datetime (`datetime64`)
+* [x] Add support to timedelta
+* [ ] Add CI/CD, including publish to Mac and manylinux via official docker
+* [ ] benchmarks
