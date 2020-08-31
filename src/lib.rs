@@ -12,7 +12,7 @@ use datafusion::execution::context::ExecutionContext as _ExecutionContext;
 use datafusion::execution::physical_plan::udf::ScalarFunction;
 
 use arrow::array;
-use arrow::datatypes::{DataType, Field};
+use arrow::datatypes::DataType;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -38,7 +38,10 @@ fn wrap<T>(a: Result<T, ExecutionError>) -> Result<T, DataStoreError> {
 
 macro_rules! to_primitive {
     ($VALUES:ident, $ARRAY_TY:ident) => {{
-        $VALUES.as_any().downcast_ref::<array::$ARRAY_TY>().ok_or_else(|| ExecutionError::General(format!("Bla.").to_owned()))?
+        $VALUES
+            .as_any()
+            .downcast_ref::<array::$ARRAY_TY>()
+            .ok_or_else(|| ExecutionError::General(format!("Bla.").to_owned()))?
     }};
 }
 
@@ -62,8 +65,8 @@ impl ExecutionContext {
         }
     }
 
-    fn sql(&mut self, query: &str, batch_size: usize) -> PyResult<HashMap<String, PyObject>> {
-        let batches = wrap(self.ctx.sql(query, batch_size))?;
+    fn sql(&mut self, query: &str) -> PyResult<HashMap<String, PyObject>> {
+        let batches = wrap(wrap(self.ctx.sql(query))?.collect())?;
         Ok(wrap(to_py::to_py(&batches))?)
     }
 
@@ -72,19 +75,30 @@ impl ExecutionContext {
         Ok(())
     }
 
-    fn register_udf(&mut self, name: &str, func: PyObject, args_types: Vec<&str>, return_type: &str) -> PyResult<()> {
+    fn register_udf(
+        &mut self,
+        name: &str,
+        func: PyObject,
+        args_types: Vec<&str>,
+        return_type: &str,
+    ) -> PyResult<()> {
         // map strings for declared types to cases from DataType
-        let args_types: Vec<DataType> = wrap(args_types.iter().map(|x| types::data_type(&x)).collect::<Result<Vec<DataType>, ExecutionError>>())?;
+        let args_types: Vec<DataType> = wrap(
+            args_types
+                .iter()
+                .map(|x| types::data_type(&x))
+                .collect::<Result<Vec<DataType>, ExecutionError>>(),
+        )?;
         let return_type = wrap(types::data_type(return_type))?;
         let return_type1 = return_type.clone();
 
         // construct the argument fields. Their name does not matter. 2x because one needs to be copied to ScalarFunction
-        let fields = args_types.iter().map(|x| Field::new("n", x.clone(), true)).collect();
-        let fields1: Vec<Field> = args_types.iter().map(|x| Field::new("n", x.clone(), true)).collect();
+        //let fields = args_types.iter().map(|x| Field::new("n", x.clone(), true)).collect();
+        let args_types1 = args_types.clone();
 
         self.ctx.register_udf(ScalarFunction::new(
             name.into(),
-            fields,
+            args_types.clone(),
             return_type,
             Arc::new(
                 move |args: &[array::ArrayRef]| -> Result<array::ArrayRef, ExecutionError> {
@@ -102,18 +116,29 @@ impl ExecutionContext {
                     let mut final_values = Vec::with_capacity(capacity);
                     for i in 0..args[0].len() {
                         // 1. cast args to PyTuple
-                        let mut values = Vec::with_capacity(fields1.len());
-                        for field_i in 0..fields1.len() {
-                            let arg = &args[field_i];
-                            let values_i = match fields1[field_i].data_type() {
-                                DataType::Float64 => Ok(to_primitive!(arg, Float64Array).value(i).to_object(py)),
-                                DataType::Float32 => Ok(to_primitive!(arg, Float32Array).value(i).to_object(py)),
-                                DataType::Int32 => Ok(to_primitive!(arg, Int32Array).value(i).to_object(py)),
-                                DataType::UInt32 => Ok(to_primitive!(arg, UInt32Array).value(i).to_object(py)),
-                                other => Err(ExecutionError::NotImplemented(format!("Datatype \"{:?}\" is still not implemented.", other).to_owned())),
+                        let mut values = Vec::with_capacity(args_types.len());
+                        for arg_i in 0..args_types.len() {
+                            let arg = &args[arg_i];
+                            let values_i = match &args_types1[arg_i] {
+                                DataType::Float64 => {
+                                    Ok(to_primitive!(arg, Float64Array).value(i).to_object(py))
+                                }
+                                DataType::Float32 => {
+                                    Ok(to_primitive!(arg, Float32Array).value(i).to_object(py))
+                                }
+                                DataType::Int32 => {
+                                    Ok(to_primitive!(arg, Int32Array).value(i).to_object(py))
+                                }
+                                DataType::UInt32 => {
+                                    Ok(to_primitive!(arg, UInt32Array).value(i).to_object(py))
+                                }
+                                other => Err(ExecutionError::NotImplemented(
+                                    format!("Datatype \"{:?}\" is still not implemented.", other)
+                                        .to_owned(),
+                                )),
                             }?;
                             values.push(values_i);
-                        };
+                        }
                         let values = PyTuple::new(py, values);
 
                         // 2. call function
@@ -130,11 +155,21 @@ impl ExecutionContext {
 
                     // 3. cast the arguments back to Rust-Native
                     match &return_type1 {
-                        DataType::Float64 => to_native!(final_values, Float64Builder, f64, capacity),
-                        DataType::Float32 => to_native!(final_values, Float32Builder, f32, capacity),
+                        DataType::Float64 => {
+                            to_native!(final_values, Float64Builder, f64, capacity)
+                        }
+                        DataType::Float32 => {
+                            to_native!(final_values, Float32Builder, f32, capacity)
+                        }
                         DataType::Int32 => to_native!(final_values, Int32Builder, i32, capacity),
                         DataType::Int64 => to_native!(final_values, Int64Builder, i64, capacity),
-                        other => Err(ExecutionError::NotImplemented(format!("Datatype \"{:?}\" is still not implemented as a return type.", other).to_owned())),
+                        other => Err(ExecutionError::NotImplemented(
+                            format!(
+                                "Datatype \"{:?}\" is still not implemented as a return type.",
+                                other
+                            )
+                            .to_owned(),
+                        )),
                     }
                 },
             ),
@@ -158,5 +193,5 @@ fn datafusion(_py: Python, m: &PyModule) -> PyResult<()> {
     Ok(())
 }
 
-mod types;
 mod to_py;
+mod types;

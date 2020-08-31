@@ -5,10 +5,9 @@ use datafusion::error::ExecutionError;
 use std::collections::HashMap;
 
 use arrow::array;
-use arrow::datatypes::{TimeUnit, DateUnit};
 use arrow::datatypes::DataType;
+use arrow::datatypes::{DateUnit, TimeUnit};
 use arrow::record_batch::RecordBatch;
-
 
 /// Maps a numpy dtype to a PyObject denoting its null representation.
 fn py_null(numpy_type: &str, py: &Python, numpy: &PyModule) -> Option<PyObject> {
@@ -16,16 +15,34 @@ fn py_null(numpy_type: &str, py: &Python, numpy: &PyModule) -> Option<PyObject> 
         "O" => Some(py.None()),
         "float32" => Some(PyObject::from(numpy.get("NaN").unwrap())),
         "float64" => Some(PyObject::from(numpy.get("NaN").unwrap())),
-        "datetime64[s]" => Some(PyObject::from(numpy.call("datetime64", ("NaT",), None).unwrap())),
-        "datetime64[us]" => Some(PyObject::from(numpy.call("datetime64", ("NaT",), None).unwrap())),
-        "datetime64[ms]" => Some(PyObject::from(numpy.call("datetime64", ("NaT",), None).unwrap())),
-        "datetime64[ns]" => Some(PyObject::from(numpy.call("datetime64", ("NaT",), None).unwrap())),
-        "datetime64[D]" => Some(PyObject::from(numpy.call("datetime64", ("NaT",), None).unwrap())),
-        "timedelta64[ms]" => Some(PyObject::from(numpy.call("timedelta64", ("NaT",), None).unwrap())),
-        "timedelta64[us]" => Some(PyObject::from(numpy.call("timedelta64", ("NaT",), None).unwrap())),
-        "timedelta64[ns]" => Some(PyObject::from(numpy.call("timedelta64", ("NaT",), None).unwrap())),
-        "timedelta64[s]" => Some(PyObject::from(numpy.call("timedelta64", ("NaT",), None).unwrap())),
-        _ => None
+        "datetime64[s]" => Some(PyObject::from(
+            numpy.call("datetime64", ("NaT",), None).unwrap(),
+        )),
+        "datetime64[us]" => Some(PyObject::from(
+            numpy.call("datetime64", ("NaT",), None).unwrap(),
+        )),
+        "datetime64[ms]" => Some(PyObject::from(
+            numpy.call("datetime64", ("NaT",), None).unwrap(),
+        )),
+        "datetime64[ns]" => Some(PyObject::from(
+            numpy.call("datetime64", ("NaT",), None).unwrap(),
+        )),
+        "datetime64[D]" => Some(PyObject::from(
+            numpy.call("datetime64", ("NaT",), None).unwrap(),
+        )),
+        "timedelta64[ms]" => Some(PyObject::from(
+            numpy.call("timedelta64", ("NaT",), None).unwrap(),
+        )),
+        "timedelta64[us]" => Some(PyObject::from(
+            numpy.call("timedelta64", ("NaT",), None).unwrap(),
+        )),
+        "timedelta64[ns]" => Some(PyObject::from(
+            numpy.call("timedelta64", ("NaT",), None).unwrap(),
+        )),
+        "timedelta64[s]" => Some(PyObject::from(
+            numpy.call("timedelta64", ("NaT",), None).unwrap(),
+        )),
+        _ => None,
     }
 }
 
@@ -83,18 +100,61 @@ pub fn to_py(batches: &Vec<RecordBatch>) -> Result<HashMap<String, PyObject>, Ex
             DataType::Float32 => to_py_numpy!(batches, column_index, Float32Array, "float32"),
             DataType::Float64 => to_py_numpy!(batches, column_index, Float64Array, "float64"),
             // numpy does not support timezones, thus we ignore them
-            DataType::Timestamp(TimeUnit::Second, _) => to_py_numpy!(batches, column_index, TimestampSecondArray, "datetime64[s]"),
-            DataType::Timestamp(TimeUnit::Millisecond, _) => to_py_numpy!(batches, column_index, TimestampMillisecondArray, "datetime64[ms]"),
-            DataType::Timestamp(TimeUnit::Microsecond, _) => to_py_numpy!(batches, column_index, TimestampMicrosecondArray, "datetime64[us]"),
-            DataType::Timestamp(TimeUnit::Nanosecond, _) => to_py_numpy!(batches, column_index, TimestampNanosecondArray, "datetime64[ns]"),
-            DataType::Date32(DateUnit::Day) => to_py_numpy!(batches, column_index, Date32Array, "datetime64[D]"),
-            DataType::Date64(DateUnit::Millisecond) => to_py_numpy!(batches, column_index, Date64Array, "datetime64[ms]"),
-            DataType::Duration(TimeUnit::Second) => to_py_numpy!(batches, column_index, DurationSecondArray, "timedelta64[s]"),
-            DataType::Duration(TimeUnit::Millisecond) => to_py_numpy!(batches, column_index, DurationMillisecondArray, "timedelta64[ms]"),
-            DataType::Duration(TimeUnit::Microsecond) => to_py_numpy!(batches, column_index, DurationMicrosecondArray, "timedelta64[us]"),
-            DataType::Duration(TimeUnit::Nanosecond) => to_py_numpy!(batches, column_index, DurationNanosecondArray, "timedelta64[ns]"),
+            DataType::Timestamp(TimeUnit::Second, _) => {
+                to_py_numpy!(batches, column_index, TimestampSecondArray, "datetime64[s]")
+            }
+            DataType::Timestamp(TimeUnit::Millisecond, _) => to_py_numpy!(
+                batches,
+                column_index,
+                TimestampMillisecondArray,
+                "datetime64[ms]"
+            ),
+            DataType::Timestamp(TimeUnit::Microsecond, _) => to_py_numpy!(
+                batches,
+                column_index,
+                TimestampMicrosecondArray,
+                "datetime64[us]"
+            ),
+            DataType::Timestamp(TimeUnit::Nanosecond, _) => to_py_numpy!(
+                batches,
+                column_index,
+                TimestampNanosecondArray,
+                "datetime64[ns]"
+            ),
+            DataType::Date32(DateUnit::Day) => {
+                to_py_numpy!(batches, column_index, Date32Array, "datetime64[D]")
+            }
+            DataType::Date64(DateUnit::Millisecond) => {
+                to_py_numpy!(batches, column_index, Date64Array, "datetime64[ms]")
+            }
+            DataType::Duration(TimeUnit::Second) => {
+                to_py_numpy!(batches, column_index, DurationSecondArray, "timedelta64[s]")
+            }
+            DataType::Duration(TimeUnit::Millisecond) => to_py_numpy!(
+                batches,
+                column_index,
+                DurationMillisecondArray,
+                "timedelta64[ms]"
+            ),
+            DataType::Duration(TimeUnit::Microsecond) => to_py_numpy!(
+                batches,
+                column_index,
+                DurationMicrosecondArray,
+                "timedelta64[us]"
+            ),
+            DataType::Duration(TimeUnit::Nanosecond) => to_py_numpy!(
+                batches,
+                column_index,
+                DurationNanosecondArray,
+                "timedelta64[ns]"
+            ),
             DataType::Binary => to_py_numpy!(batches, column_index, BinaryArray, "u8"),
-            DataType::FixedSizeBinary(byte_width) => to_py_numpy!(batches, column_index, BinaryArray, &*format!("u{}", byte_width * 8)),
+            DataType::FixedSizeBinary(byte_width) => to_py_numpy!(
+                batches,
+                column_index,
+                BinaryArray,
+                &*format!("u{}", byte_width * 8)
+            ),
             DataType::LargeBinary => to_py_numpy!(batches, column_index, LargeBinaryArray, "u8"),
             /*
             No native type in numpy
