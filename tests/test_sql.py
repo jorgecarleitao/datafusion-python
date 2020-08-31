@@ -11,7 +11,11 @@ import pyarrow.parquet
 
 
 def _data():
-    return numpy.concatenate([numpy.random.normal(0, 0.01, size=50), numpy.random.normal(50, 0.01, size=50)])
+    numpy.random.seed(1)
+    return numpy.concatenate([
+        numpy.random.normal(0, 0.01, size=50),
+        numpy.random.normal(50, 0.01, size=50)
+    ])
 
 
 def _data_with_nulls():
@@ -32,6 +36,7 @@ def _data_string():
     data[mask==0] = None
     return data
 
+
 def _data_datetime(f):
     data = numpy.array([
         numpy.datetime64('2018-08-18 23:25'),
@@ -41,12 +46,14 @@ def _data_datetime(f):
     data = numpy.array(data, dtype=f'datetime64[{f}]')
     return data
 
+
 def _data_timedelta(f):
     return numpy.array([
         numpy.timedelta64(10, f),
         numpy.timedelta64(1, f),
         numpy.timedelta64('NaT', f)
     ])
+
 
 def _data_binary():
     return numpy.array([
@@ -76,14 +83,17 @@ class TestCase(unittest.TestCase):
         # Remove the directory after the test
         shutil.rmtree(self.test_dir)
 
-    def test_basics(self):
+    def test_no_table(self):
         ctx = datafusion.ExecutionContext()
         with self.assertRaises(Exception):
-            datafusion.Context().sql("SELECT a FROM b", 10)
+            datafusion.Context().sql("SELECT a FROM b")
 
     def test_register(self):
         ctx = datafusion.ExecutionContext()
-        ctx.register_parquet("t", "../arrow/testing/data/parquet/generated_simple_numerics/blogs.parquet")
+
+        path = _write_parquet(os.path.join(self.test_dir, 'a.parquet'), _data())
+
+        ctx.register_parquet("t", path)
 
         self.assertEqual(ctx.tables(), {"t"})
 
@@ -97,26 +107,28 @@ class TestCase(unittest.TestCase):
         self.assertEqual(ctx.tables(), {"t"})
 
         # count
-        expected = {'COUNT': numpy.array([100])}
-        self.assertEqual(expected, ctx.sql("SELECT COUNT(a) FROM t", 20))
+        expected = {'COUNT(a)': numpy.array([100])}
+        self.assertEqual(expected, ctx.sql("SELECT COUNT(a) FROM t"))
 
         # where
-        expected = {'COUNT': numpy.array([50])}
-        self.assertEqual(expected, ctx.sql("SELECT COUNT(a) FROM t WHERE a > 10", 20))
+        expected = {'COUNT(a)': numpy.array([50])}
+        self.assertEqual(expected, ctx.sql("SELECT COUNT(a) FROM t WHERE a > 10"))
 
         # group by
-        result = ctx.sql("SELECT (a > 50), COUNT(a) FROM t GROUP BY CAST((a > 10.0) AS int)", 20)
-        expected = {'CAST': numpy.array([0, 1]), 'COUNT': numpy.array([50, 50])}
+        result = ctx.sql("SELECT CAST(a as int), COUNT(a) FROM t GROUP BY CAST(a as int)")
+        expected = {
+            'CAST(a as Int32)': numpy.array([50,  0, 49], dtype=numpy.int32),
+            'COUNT(a)': numpy.array([31, 50, 19], dtype=numpy.uint64)}
         numpy.testing.assert_equal(expected, result)
 
         # order by
-        result = ctx.sql("SELECT a, CAST(a AS int) FROM t ORDER BY a DESC LIMIT 2", 20)['CAST']
+        result = ctx.sql("SELECT a, CAST(a AS int) FROM t ORDER BY a DESC LIMIT 2")['CAST(a as Int32)']
         expected = numpy.array([50, 50])
         numpy.testing.assert_equal(expected, result)
 
     def test_cast(self):
         """
-        Verify that we can run
+        Verify that we can cast
         """
         ctx = datafusion.ExecutionContext()
 
@@ -135,7 +147,7 @@ class TestCase(unittest.TestCase):
         select = ', '.join([f'CAST(9 AS {t})' for t in valid_types])
 
         # can execute, which implies that we can cast
-        ctx.sql(f'SELECT {select} FROM t', 20)
+        ctx.sql(f'SELECT {select} FROM t')
 
     def test_udf(self):
         data = _data()
@@ -148,7 +160,7 @@ class TestCase(unittest.TestCase):
         path = _write_parquet(os.path.join(self.test_dir, 'a.parquet'), data)
         ctx.register_parquet("t", path)
 
-        result = ctx.sql("SELECT iden(a) AS tt FROM t", 20)
+        result = ctx.sql("SELECT iden(a) AS tt FROM t")
 
         # compute the same operation here
         expected = {'tt': numpy.abs(data)}
@@ -164,7 +176,7 @@ class TestCase(unittest.TestCase):
         path = _write_parquet(os.path.join(self.test_dir, 'a.parquet'), data)
         ctx.register_parquet("t", path)
 
-        result = ctx.sql("SELECT a AS tt FROM t", 20)
+        result = ctx.sql("SELECT a AS tt FROM t")
 
         numpy.testing.assert_equal(data, result['tt'])
 
@@ -179,7 +191,7 @@ class TestCase(unittest.TestCase):
         path = _write_parquet(os.path.join(self.test_dir, 'a.parquet'), data)
         ctx.register_parquet("t", path)
 
-        result = ctx.sql("SELECT iden(a) AS tt FROM t", 20)
+        result = ctx.sql("SELECT iden(a) AS tt FROM t")
 
         # compute the same operation here
         expected = {'tt': numpy.abs(data)}
@@ -195,7 +207,7 @@ class TestCase(unittest.TestCase):
         path = _write_parquet(os.path.join(self.test_dir, 'a.parquet'), data)
         ctx.register_parquet("t", path)
 
-        result = ctx.sql("SELECT a AS tt FROM t", 20)
+        result = ctx.sql("SELECT a AS tt FROM t")
 
         numpy.testing.assert_equal(data, result['tt'])
 
@@ -206,7 +218,7 @@ class TestCase(unittest.TestCase):
         path = _write_parquet(os.path.join(self.test_dir, 'a.parquet'), data)
         ctx.register_parquet("t", path)
 
-        result = ctx.sql("SELECT a AS tt FROM t", 20)
+        result = ctx.sql("SELECT a AS tt FROM t")
 
         numpy.testing.assert_equal(data, result['tt'])
 
@@ -222,15 +234,8 @@ class TestCase(unittest.TestCase):
     def test_datetime_s(self):
         self._test_data(_data_datetime('s'))
 
-    # See ARROW-9461
-    @unittest.expectedFailure
     def test_datetime_d(self):
         self._test_data(_data_datetime('D'))
-
-    # See ARROW-6780: pyarrow bindings for C++ do not support writing this to parquet
-    @unittest.expectedFailure
-    def test_timedelta_ns(self):
-        self._test_data(_data_timedelta('ns'))
 
     def test_binary(self):
         self._test_data(_data_binary())

@@ -5,9 +5,9 @@ authors = ["Jorge C. Leitao <jorgecarleitao@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-pyo3 = { version = "0.10.1", features = ["extension-module"] }
-datafusion = { path = "../arrow/rust/datafusion" }
-arrow = { path = "../arrow/rust/arrow" }
+pyo3 = { version = "0.11.1", features = ["extension-module"] }
+datafusion = { git = "https://github.com/apache/arrow.git", rev = "df3bee2" }
+arrow = { git = "https://github.com/apache/arrow.git", rev = "df3bee2" }
 thiserror = "^1.0"
 
 [lib]

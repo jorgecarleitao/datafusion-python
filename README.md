@@ -25,7 +25,7 @@ ctx = datafusion.ExecutionContext()
 
 ctx.register_parquet('t', path)
 
-result = ctx.sql('SELECT (a > 50), COUNT(a) FROM t GROUP BY CAST((a > 10.0) AS int)', 1000)
+result = ctx.sql('SELECT (a > 50), COUNT(a) FROM t GROUP BY CAST((a > 10.0) AS int)')
 # result is a dictionary with two keys, CAST and COUNT, whose values are numpy arrays.
 ```
 
@@ -35,7 +35,7 @@ UDF usage:
 # name, function, input types, output types
 ctx.register_udf('my_abs', lambda x: abs(x), ['float64'], 'float64')
 
-result = ctx.sql("SELECT my_abs(a) FROM t", 1000)
+result = ctx.sql("SELECT my_abs(a) FROM t")
 ```
 
 ## How to install
@@ -50,8 +50,6 @@ This assumes that you have rust and cargo installed. We use the workflow recomme
 Bootstrap:
 
 ```bash
-# fetch arrow
-git clone git@github.com:apache/arrow.git
 # fetch this repo
 git clone git@github.com:jorgecarleitao/datafusion-python.git
 
@@ -62,7 +60,7 @@ python -m venv venv
 venv/bin/pip install maturin==0.8.2 toml==0.10.1
 
 # used for testing
-venv/bin/python install pyarrow==0.17.1
+venv/bin/pip install pyarrow==1.0.0
 ```
 
 Whenever rust code changes (your changes or via git pull):

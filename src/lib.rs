@@ -27,7 +27,7 @@ impl From<DataStoreError> for PyErr {
     }
 }
 
-#[pyclass]
+#[pyclass(unsendable)]
 struct ExecutionContext {
     ctx: _ExecutionContext,
 }
