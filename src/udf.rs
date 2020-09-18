@@ -66,6 +66,9 @@ pub fn udf(func: PyObject, args_types: Vec<DataType>, return_type: Arc<DataType>
                             DataType::UInt32 => {
                                 Ok(to_primitive!(arg, UInt32Array).value(i).to_object(py))
                             }
+                            DataType::Boolean => {
+                                Ok(to_primitive!(arg, BooleanArray).value(i).to_object(py))
+                            }
                             other => Err(ExecutionError::NotImplemented(
                                 format!("Datatype \"{:?}\" is still not implemented.", other)
                                     .to_owned(),
@@ -98,6 +101,9 @@ pub fn udf(func: PyObject, args_types: Vec<DataType>, return_type: Arc<DataType>
                 }
                 DataType::Int32 => to_native!(final_values, Int32Builder, i32, capacity),
                 DataType::Int64 => to_native!(final_values, Int64Builder, i64, capacity),
+                DataType::Boolean => {
+                    to_native!(final_values, BooleanBuilder, bool, capacity)
+                }
                 other => Err(ExecutionError::NotImplemented(
                     format!(
                         "Datatype \"{:?}\" is still not implemented as a return type.",

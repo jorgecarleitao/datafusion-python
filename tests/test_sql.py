@@ -139,48 +139,48 @@ class TestCase(unittest.TestCase):
         # can execute, which implies that we can cast
         ctx.sql(f'SELECT {select} FROM t')
 
-    def test_udf(self):
-        data = _data()
+    def _test_udf(self, udf, args, return_type, array, expected):
 
         ctx = datafusion.ExecutionContext()
 
-        ctx.register_udf("iden", lambda x: abs(x), ['float64'], 'float64')
-
         # write to disk
-        path = _write_parquet(os.path.join(self.test_dir, 'a.parquet'), data)
+        path = _write_parquet(os.path.join(self.test_dir, 'a.parquet'), array)
         ctx.register_parquet("t", path)
 
-        batches = ctx.sql("SELECT iden(a) AS tt FROM t")
+        ctx.register_udf("udf", udf, args, return_type)
+
+        batches = ctx.sql("SELECT udf(a) AS tt FROM t")
 
         result = batches[0].column(0)
 
-        # compute the same operation here
-        expected = numpy.abs(data)
+        self.assertEqual(expected, result)
 
-        numpy.testing.assert_equal(expected, result)
+    def test_null_args_udf(self):
+        self._test_udf(
+            lambda x: x is None,
+            ['float64'],
+            'bool',
+            pyarrow.array([0, 1, 2], None, numpy.array([False, True, False])),
+            pyarrow.array([False, True, False])
+        )
 
-    def test_nans(self):
-        self._test_data(_data_with_nans())
+    def test_udf_other(self):
+        self._test_udf(
+            lambda x: abs(x) if x is not None else None,
+            ['float64'],
+            'float64',
+            pyarrow.array([-1.2, -1.3, 1.2], None),
+            pyarrow.array([1.2, 1.3, 1.2], None)
+        )
 
-    def test_nans_udf(self):
-        data = _data_with_nans()
+class TestIO(unittest.TestCase):
+    def setUp(self):
+        # Create a temporary directory
+        self.test_dir = tempfile.mkdtemp()
 
-        ctx = datafusion.ExecutionContext()
-
-        ctx.register_udf("iden", lambda x: abs(x), ['float64'], 'float64')
-
-        # write to disk
-        path = _write_parquet(os.path.join(self.test_dir, 'a.parquet'), data)
-        ctx.register_parquet("t", path)
-
-        batches = ctx.sql("SELECT iden(a) AS tt FROM t")
-
-        result = batches[0].column(0)
-
-        # compute the same operation here
-        expected = numpy.abs(data)
-
-        numpy.testing.assert_equal(expected, result)
+    def tearDown(self):
+        # Remove the directory after the test
+        shutil.rmtree(self.test_dir)
 
     def _test_data(self, data):
         ctx = datafusion.ExecutionContext()
@@ -194,6 +194,9 @@ class TestCase(unittest.TestCase):
         result = batches[0].column(0)
 
         numpy.testing.assert_equal(data, result)
+
+    def test_nans(self):
+        self._test_data(_data_with_nans())
 
     def test_utf8(self):
         array = pyarrow.array(["a", "b", "c"], pyarrow.utf8(), numpy.array([False, True, False]))
