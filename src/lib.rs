@@ -1,8 +1,6 @@
 use std::sync::Arc;
 
-use pyo3::exceptions;
 use pyo3::prelude::*;
-use pyo3::PyErr;
 
 use std::collections::HashSet;
 
@@ -11,27 +9,15 @@ use datafusion::execution::context::ExecutionContext as _ExecutionContext;
 use datafusion::logical_plan::create_udf;
 
 use arrow::datatypes::DataType;
-use thiserror::Error;
-
-#[derive(Error, Debug)]
-pub enum DataStoreError {
-    #[error(transparent)]
-    ExecutionError(#[from] ExecutionError),
-}
-
-impl From<DataStoreError> for PyErr {
-    fn from(err: DataStoreError) -> PyErr {
-        exceptions::Exception::py_err(err.to_string())
-    }
-}
+mod errors;
 
 #[pyclass(unsendable)]
 struct ExecutionContext {
     ctx: _ExecutionContext,
 }
 
-fn wrap<T>(a: Result<T, ExecutionError>) -> Result<T, DataStoreError> {
-    return Ok(a?);
+fn wrap<T>(a: Result<T, ExecutionError>) -> Result<T, errors::DataFusionError> {
+    Ok(a?)
 }
 
 #[pymethods]
@@ -44,7 +30,13 @@ impl ExecutionContext {
     }
 
     fn sql(&mut self, query: &str) -> PyResult<PyObject> {
-        let batches = wrap(wrap(self.ctx.sql(query))?.collect())?;
+        let df = self
+            .ctx
+            .sql(query)
+            .map_err(|e| -> errors::DataFusionError { e.into() })?;
+        let batches = df
+            .collect()
+            .map_err(|e| -> errors::DataFusionError { e.into() })?;
         to_py::to_py(&batches)
     }
 
@@ -78,6 +70,31 @@ impl ExecutionContext {
         Ok(())
     }
 
+    fn register_array_udf(
+        &mut self,
+        name: &str,
+        func: PyObject,
+        args_types: Vec<&str>,
+        return_type: &str,
+    ) -> PyResult<()> {
+        // map strings for declared types to cases from DataType
+        let args_types: Vec<DataType> = wrap(
+            args_types
+                .iter()
+                .map(|x| types::data_type(&x))
+                .collect::<Result<Vec<DataType>, ExecutionError>>(),
+        )?;
+        let return_type = Arc::new(wrap(types::data_type(return_type))?);
+
+        self.ctx.register_udf(create_udf(
+            name.into(),
+            args_types.clone(),
+            return_type.clone(),
+            udf::array_udf(func, args_types, return_type),
+        ));
+        Ok(())
+    }
+
     fn tables(&self) -> HashSet<String> {
         self.ctx.tables()
     }
@@ -94,6 +111,7 @@ fn datafusion(_py: Python, m: &PyModule) -> PyResult<()> {
     Ok(())
 }
 
+mod to_arrow;
 mod to_py;
 mod types;
 mod udf;

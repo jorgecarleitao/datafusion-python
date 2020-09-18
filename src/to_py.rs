@@ -88,7 +88,12 @@ fn init_py_buffer<'a>(buffer: &Buffer, pyarrow: &'a PyModule) -> Result<&'a PyAn
     pyarrow.call1("foreign_buffer", (pointer, buffer.len()))
 }
 
-fn to_py_array<'a>(array: &ArrayRef, py: Python, pyarrow: &'a PyModule) -> Result<PyObject, PyErr> {
+/// performs a zero-copy conversion between a Rust's Array to a Pyarrow array.
+pub fn to_py_array<'a>(
+    array: &ArrayRef,
+    py: Python,
+    pyarrow: &'a PyModule,
+) -> Result<PyObject, PyErr> {
     let a = pyarrow.getattr("Array")?;
     let none = py.None();
 

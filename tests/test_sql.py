@@ -173,6 +173,40 @@ class TestCase(unittest.TestCase):
             pyarrow.array([1.2, None, 1.2], None)
         )
 
+    def _test_array_udf(self, udf, args, return_type, array, expected):
+        ctx = datafusion.ExecutionContext()
+
+        # write to disk
+        path = _write_parquet(os.path.join(self.test_dir, 'a.parquet'), array)
+        ctx.register_parquet("t", path)
+
+        ctx.register_array_udf("udf", udf, args, return_type)
+
+        batches = ctx.sql("SELECT udf(a) AS tt FROM t")
+
+        result = batches[0].column(0)
+
+        self.assertEqual(expected, result)
+
+    def test_array_udf_identity(self):
+        self._test_array_udf(
+            lambda x: x,
+            ['float64'],
+            'float64',
+            pyarrow.array([-1.2, None, 1.2]),
+            pyarrow.array([-1.2, None, 1.2])
+        )
+
+    def test_array_udf(self):
+        self._test_array_udf(
+            lambda x: x.is_null(),
+            ['float64'],
+            'bool',
+            pyarrow.array([-1.2, None, 1.2]),
+            pyarrow.array([False, True, False])
+        )
+
+
 class TestIO(unittest.TestCase):
     def setUp(self):
         # Create a temporary directory
