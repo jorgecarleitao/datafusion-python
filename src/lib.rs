@@ -5,7 +5,7 @@ use pyo3::prelude::*;
 use pyo3::types::PyTuple;
 use pyo3::PyErr;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use datafusion::error::ExecutionError;
 use datafusion::execution::context::ExecutionContext as _ExecutionContext;
@@ -65,9 +65,9 @@ impl ExecutionContext {
         }
     }
 
-    fn sql(&mut self, query: &str) -> PyResult<HashMap<String, PyObject>> {
+    fn sql(&mut self, query: &str) -> PyResult<PyObject> {
         let batches = wrap(wrap(self.ctx.sql(query))?.collect())?;
-        Ok(wrap(to_py::to_py(&batches))?)
+        to_py::to_py(&batches)
     }
 
     fn register_parquet(&mut self, name: &str, path: &str) -> PyResult<()> {

@@ -15,4 +15,4 @@ name = "datafusion"
 crate-type = ["cdylib"]
 
 [package.metadata.maturin]
-requires-dist = ["numpy>=1,<2"]
+requires-dist = ["pyarrow>=1,<2"]

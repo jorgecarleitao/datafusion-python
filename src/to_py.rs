@@ -1,181 +1,146 @@
+use pyo3::exceptions;
+use pyo3::PyErr;
+
 use pyo3::prelude::*;
 
-use datafusion::error::ExecutionError;
+use std::mem;
+use std::convert::From;
 
-use std::collections::HashMap;
-
-use arrow::array;
+use arrow::{buffer::Buffer, array::ArrayRef};
 use arrow::datatypes::DataType;
 use arrow::datatypes::{DateUnit, TimeUnit};
 use arrow::record_batch::RecordBatch;
 
-/// Maps a numpy dtype to a PyObject denoting its null representation.
-fn py_null(numpy_type: &str, py: &Python, numpy: &PyModule) -> Option<PyObject> {
-    match numpy_type {
-        "O" => Some(py.None()),
-        "float32" => Some(PyObject::from(numpy.get("NaN").unwrap())),
-        "float64" => Some(PyObject::from(numpy.get("NaN").unwrap())),
-        "datetime64[s]" => Some(PyObject::from(
-            numpy.call("datetime64", ("NaT",), None).unwrap(),
-        )),
-        "datetime64[us]" => Some(PyObject::from(
-            numpy.call("datetime64", ("NaT",), None).unwrap(),
-        )),
-        "datetime64[ms]" => Some(PyObject::from(
-            numpy.call("datetime64", ("NaT",), None).unwrap(),
-        )),
-        "datetime64[ns]" => Some(PyObject::from(
-            numpy.call("datetime64", ("NaT",), None).unwrap(),
-        )),
-        "datetime64[D]" => Some(PyObject::from(
-            numpy.call("datetime64", ("NaT",), None).unwrap(),
-        )),
-        "timedelta64[ms]" => Some(PyObject::from(
-            numpy.call("timedelta64", ("NaT",), None).unwrap(),
-        )),
-        "timedelta64[us]" => Some(PyObject::from(
-            numpy.call("timedelta64", ("NaT",), None).unwrap(),
-        )),
-        "timedelta64[ns]" => Some(PyObject::from(
-            numpy.call("timedelta64", ("NaT",), None).unwrap(),
-        )),
-        "timedelta64[s]" => Some(PyObject::from(
-            numpy.call("timedelta64", ("NaT",), None).unwrap(),
-        )),
-        _ => None,
+#[derive(Debug)]
+pub enum DataStoreError {
+    ExecutionError(String),
+}
+
+impl From<DataStoreError> for PyErr {
+    fn from(err: DataStoreError) -> PyErr {
+        match err {
+            DataStoreError::ExecutionError(err) => exceptions::Exception::py_err(err.to_string())
+        }
     }
 }
 
-macro_rules! to_py_numpy {
-    ($BATCHES:ident, $COLUMN_INDEX:ident, $ARRAY_TY:ident, $NUMPY_TY:expr) => {{
-        let mut values = Vec::with_capacity($BATCHES.len() * $BATCHES[0].num_rows());
-        let mut mask = Vec::with_capacity($BATCHES.len() * $BATCHES[0].num_rows());
-        for batch in $BATCHES {
-            let column = batch.column($COLUMN_INDEX);
-            let casted = column.as_any().downcast_ref::<array::$ARRAY_TY>().unwrap();
-            for i in 0..column.len() {
-                mask.push(column.is_null(i));
-                values.push(casted.value(i));
+/// maps a Rust's DataType to its name in pyarrow
+fn type_to_type<'a>(data_type: &DataType, pyarrow: &'a PyModule) -> Result<&'a PyAny, PyErr> {
+    match data_type {
+        DataType::Boolean => pyarrow.call0("bool_"),
+        DataType::Int8 => pyarrow.call0("int8"),
+        DataType::Int16 => pyarrow.call0("int16"),
+        DataType::Int32 => pyarrow.call0("int32"),
+        DataType::Int64 => pyarrow.call0("int64"),
+        DataType::UInt8 => pyarrow.call0("uint8"),
+        DataType::UInt16 => pyarrow.call0("uint16"),
+        DataType::UInt32 => pyarrow.call0("uint32"),
+        DataType::UInt64 => pyarrow.call0("uint64"),
+        DataType::Float32 => pyarrow.call0("float32"),
+        DataType::Float64 => pyarrow.call0("float64"),
+        DataType::Binary => pyarrow.call0("binary"),
+        DataType::LargeBinary => pyarrow.call0("large_binary"),
+        DataType::FixedSizeBinary(t) => {
+            let binary = pyarrow.getattr("binary")?;
+            binary.call1((*t,))
+        },
+        DataType::Date32(t) => {
+            match t {
+                DateUnit::Day => pyarrow.call0("date32"),
+                other => return Err(DataStoreError::ExecutionError(
+                    format!("Type Date32({:?}) is still not valid.", other).to_owned(),
+                ).into()),
             }
-        };
-        let gil = pyo3::Python::acquire_gil();
-        let py = gil.python();
-
-        // use a Python call to construct the array, since rust-numpy does not support this type yet.
-        let numpy = PyModule::import(py, "numpy").expect("Numpy is not installed.");
-        let values = numpy.call1("array", (values, $NUMPY_TY)).expect("Could not create numpy array");
-
-        // apply null mask to the values when a null value exists
-        let values = match py_null($NUMPY_TY, &py, &numpy) {
-            Some(null) => numpy.call1("where", (mask, null, values)).expect("Could not apply null mask"),
-            None => values,
-        };
-
-        Ok(PyObject::from(values))
-    }};
+        },
+        DataType::Timestamp(t, _) => {
+            let timestamp = pyarrow.getattr("timestamp")?;
+            match t {
+                TimeUnit::Second => timestamp.call1(("s",)),
+                TimeUnit::Millisecond => timestamp.call1(("ms",)),
+                TimeUnit::Microsecond => timestamp.call1(("us",)),
+                TimeUnit::Nanosecond => timestamp.call1(("ns",)),
+            }
+        },
+        DataType::Duration(t) => {
+            let duration = pyarrow.getattr("duration")?;
+            match t {
+                TimeUnit::Second => duration.call1(("s",)),
+                TimeUnit::Millisecond => duration.call1(("ms",)),
+                TimeUnit::Microsecond => duration.call1(("us",)),
+                TimeUnit::Nanosecond => duration.call1(("ns",)),
+            }
+        },
+        DataType::Utf8 => pyarrow.call0("utf8"),
+        DataType::LargeUtf8 => pyarrow.call0("large_utf8"),
+        other => return Err(DataStoreError::ExecutionError(
+            format!("Type {:?} is still not valid.", other).to_owned(),
+        ).into()),
+    }
 }
 
-/// Converts a Vec<RecordBatch> into HashMap<String, PyObject>
-pub fn to_py(batches: &Vec<RecordBatch>) -> Result<HashMap<String, PyObject>, ExecutionError> {
-    let mut map: HashMap<String, PyObject> = HashMap::new();
+fn init_py_buffer<'a>(buffer: &Buffer, pyarrow: &'a PyModule) -> Result<&'a PyAny, PyErr> {
+    // this assumes a 64 bit system
+    let pointer = buffer.raw_data() as i64;
+    pyarrow.call1("foreign_buffer", (pointer, buffer.len()))
+}
 
-    let schema = batches[0].schema();
+fn to_py_array<'a>(array: &ArrayRef, py: Python, pyarrow: &'a PyModule) -> Result<PyObject, PyErr> {
+    let a = pyarrow.getattr("Array")?;
+    let none = py.None();
 
-    for column_index in 0..schema.fields().len() {
-        let column_name = schema.field(column_index).name().clone();
-        let column_type = schema.field(column_index).data_type();
+    let column_type = array.data_type();
+    let data_type = type_to_type(column_type, pyarrow)?;
 
-        let value = match column_type {
-            //DataType::Null: no NullArray in arrow
-            DataType::Boolean => to_py_numpy!(batches, column_index, BooleanArray, "?"),
-            DataType::Int8 => to_py_numpy!(batches, column_index, Int8Array, "int8"),
-            DataType::Int16 => to_py_numpy!(batches, column_index, Int16Array, "int16"),
-            DataType::Int32 => to_py_numpy!(batches, column_index, Int32Array, "int32"),
-            DataType::Int64 => to_py_numpy!(batches, column_index, Int64Array, "int64"),
-            DataType::UInt8 => to_py_numpy!(batches, column_index, UInt8Array, "uint8"),
-            DataType::UInt16 => to_py_numpy!(batches, column_index, UInt16Array, "uint16"),
-            DataType::UInt32 => to_py_numpy!(batches, column_index, UInt32Array, "uint32"),
-            DataType::UInt64 => to_py_numpy!(batches, column_index, UInt64Array, "uint64"),
-            //DataType::Float16 is not represented in rust arrow
-            DataType::Float32 => to_py_numpy!(batches, column_index, Float32Array, "float32"),
-            DataType::Float64 => to_py_numpy!(batches, column_index, Float64Array, "float64"),
-            // numpy does not support timezones, thus we ignore them
-            DataType::Timestamp(TimeUnit::Second, _) => {
-                to_py_numpy!(batches, column_index, TimestampSecondArray, "datetime64[s]")
-            }
-            DataType::Timestamp(TimeUnit::Millisecond, _) => to_py_numpy!(
-                batches,
-                column_index,
-                TimestampMillisecondArray,
-                "datetime64[ms]"
-            ),
-            DataType::Timestamp(TimeUnit::Microsecond, _) => to_py_numpy!(
-                batches,
-                column_index,
-                TimestampMicrosecondArray,
-                "datetime64[us]"
-            ),
-            DataType::Timestamp(TimeUnit::Nanosecond, _) => to_py_numpy!(
-                batches,
-                column_index,
-                TimestampNanosecondArray,
-                "datetime64[ns]"
-            ),
-            DataType::Date32(DateUnit::Day) => {
-                to_py_numpy!(batches, column_index, Date32Array, "datetime64[D]")
-            }
-            DataType::Date64(DateUnit::Millisecond) => {
-                to_py_numpy!(batches, column_index, Date64Array, "datetime64[ms]")
-            }
-            DataType::Duration(TimeUnit::Second) => {
-                to_py_numpy!(batches, column_index, DurationSecondArray, "timedelta64[s]")
-            }
-            DataType::Duration(TimeUnit::Millisecond) => to_py_numpy!(
-                batches,
-                column_index,
-                DurationMillisecondArray,
-                "timedelta64[ms]"
-            ),
-            DataType::Duration(TimeUnit::Microsecond) => to_py_numpy!(
-                batches,
-                column_index,
-                DurationMicrosecondArray,
-                "timedelta64[us]"
-            ),
-            DataType::Duration(TimeUnit::Nanosecond) => to_py_numpy!(
-                batches,
-                column_index,
-                DurationNanosecondArray,
-                "timedelta64[ns]"
-            ),
-            DataType::Binary => to_py_numpy!(batches, column_index, BinaryArray, "u8"),
-            DataType::FixedSizeBinary(byte_width) => to_py_numpy!(
-                batches,
-                column_index,
-                BinaryArray,
-                &*format!("u{}", byte_width * 8)
-            ),
-            DataType::LargeBinary => to_py_numpy!(batches, column_index, LargeBinaryArray, "u8"),
-            /*
-            No native type in numpy
-            DataType::Time32(_) => {}
-            DataType::Time64(_) => {}
-            DataType::Interval(_) => {}
-            */
-            DataType::Utf8 => to_py_numpy!(batches, column_index, StringArray, "O"),
-            DataType::LargeUtf8 => to_py_numpy!(batches, column_index, StringArray, "O"),
-            /*
-            DataType::List(_) => {}
-            DataType::FixedSizeList(_, _) => {}
-            DataType::LargeList(_) => {}
-            DataType::Struct(_) => {}
-            DataType::Union(_) => {}
-            DataType::Dictionary(_, _) => {}*/
-            other => Err(ExecutionError::NotImplemented(
-                format!("Type {:?} is still not valid.", other).to_owned(),
-            )),
-        };
-        map.insert(column_name, value?);
+    let data = array.data();
+
+    let null_buffer = data.null_buffer().map_or_else(|| none.extract(py), |buffer| init_py_buffer(buffer, pyarrow))?;
+
+    let mut py_buffers: Vec<&PyAny> = vec![null_buffer];
+    for buffer in data.buffers() {
+        let buffer = init_py_buffer(buffer, pyarrow)?;
+
+        py_buffers.push(buffer);
     }
-    Ok(map)
+
+    // "leak" the data, as the buffer now owns it.
+    // todo: is this the correct way of FFI with rust?
+    // todo: does Python own it?
+    // todo: maybe a phantom object passed to the foreign_buffer?
+    mem::forget(data);
+
+    let array = a.call_method1("from_buffers", (data_type, array.len(), py_buffers))?;
+
+    Ok(PyObject::from(array))
+}
+
+fn to_py_batch<'a>(batch: &RecordBatch, py: Python, pyarrow: &'a PyModule) -> Result<PyObject, PyErr> {
+    let mut py_arrays =  vec![];
+    let mut py_names = vec![];
+
+    let schema = batch.schema();
+    for (array, field) in batch.columns().iter().zip(schema.fields().iter()) {
+        let array = to_py_array(array, py, pyarrow)?;
+
+        py_arrays.push(array);
+        py_names.push(field.name());
+    }
+
+    let record = pyarrow.getattr("RecordBatch")?.call_method1("from_arrays", (py_arrays, py_names))?;
+
+    Ok(PyObject::from(record))
+}
+
+/// Converts a Vec<RecordBatch> into a RecordBatch represented in Python
+pub fn to_py(batches: &Vec<RecordBatch>) -> Result<PyObject, PyErr> {
+    let gil = pyo3::Python::acquire_gil();
+    let py = gil.python();
+    let pyarrow = PyModule::import(py, "pyarrow")?;
+    let builtins = PyModule::import(py, "builtins")?;
+
+    let mut py_batches =  vec![];
+    for batch in batches {
+        py_batches.push(to_py_batch(batch, py, pyarrow)?);
+    }
+    let result = builtins.call1("list", (py_batches,))?;
+    Ok(PyObject::from(result))
 }

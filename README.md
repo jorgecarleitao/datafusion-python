@@ -2,16 +2,11 @@
 
 This is a Python library that binds to Apache's Arrow in-memory rust-based query engine [datafusion](https://github.com/apache/arrow/tree/master/rust/datafusion).
 It allows you to execute SQL queries against parquet or CSV files, and have the results converted back to
-numpy arrays.
+pyarrow arrays.
 
 Being written in rust, this code has strong assumptions about thread safety and lack of memory leaks.
 
-We lock the GIL to convert the results back to numpy arrays and to run UFDs.
-
-Known limitations:
-
-* timezones are stripped from datetimes as numpy does not support timezone-aware dates
-* null value information is discarded for types that do not support them (int and uint) and instead contain the default value of the type (typically a 0)
+We lock the GIL to convert the results back to pyarrow arrays and to run UFDs.
 
 ## How to use it
 
@@ -26,7 +21,7 @@ ctx = datafusion.ExecutionContext()
 ctx.register_parquet('t', path)
 
 result = ctx.sql('SELECT (a > 50), COUNT(a) FROM t GROUP BY CAST((a > 10.0) AS int)')
-# result is a dictionary with two keys, CAST and COUNT, whose values are numpy arrays.
+# result is a list of pyarrow.RecordBatch
 ```
 
 UDF usage:
