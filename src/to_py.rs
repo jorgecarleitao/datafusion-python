@@ -3,13 +3,13 @@ use pyo3::PyErr;
 
 use pyo3::prelude::*;
 
-use std::mem;
 use std::convert::From;
+use std::mem;
 
-use arrow::{buffer::Buffer, array::ArrayRef};
 use arrow::datatypes::DataType;
 use arrow::datatypes::{DateUnit, TimeUnit};
 use arrow::record_batch::RecordBatch;
+use arrow::{array::ArrayRef, buffer::Buffer};
 
 #[derive(Debug)]
 pub enum DataStoreError {
@@ -19,7 +19,7 @@ pub enum DataStoreError {
 impl From<DataStoreError> for PyErr {
     fn from(err: DataStoreError) -> PyErr {
         match err {
-            DataStoreError::ExecutionError(err) => exceptions::Exception::py_err(err.to_string())
+            DataStoreError::ExecutionError(err) => exceptions::Exception::py_err(err.to_string()),
         }
     }
 }
@@ -43,13 +43,14 @@ fn type_to_type<'a>(data_type: &DataType, pyarrow: &'a PyModule) -> Result<&'a P
         DataType::FixedSizeBinary(t) => {
             let binary = pyarrow.getattr("binary")?;
             binary.call1((*t,))
-        },
-        DataType::Date32(t) => {
-            match t {
-                DateUnit::Day => pyarrow.call0("date32"),
-                other => return Err(DataStoreError::ExecutionError(
+        }
+        DataType::Date32(t) => match t {
+            DateUnit::Day => pyarrow.call0("date32"),
+            other => {
+                return Err(DataStoreError::ExecutionError(
                     format!("Type Date32({:?}) is still not valid.", other).to_owned(),
-                ).into()),
+                )
+                .into())
             }
         },
         DataType::Timestamp(t, _) => {
@@ -60,7 +61,7 @@ fn type_to_type<'a>(data_type: &DataType, pyarrow: &'a PyModule) -> Result<&'a P
                 TimeUnit::Microsecond => timestamp.call1(("us",)),
                 TimeUnit::Nanosecond => timestamp.call1(("ns",)),
             }
-        },
+        }
         DataType::Duration(t) => {
             let duration = pyarrow.getattr("duration")?;
             match t {
@@ -69,12 +70,15 @@ fn type_to_type<'a>(data_type: &DataType, pyarrow: &'a PyModule) -> Result<&'a P
                 TimeUnit::Microsecond => duration.call1(("us",)),
                 TimeUnit::Nanosecond => duration.call1(("ns",)),
             }
-        },
+        }
         DataType::Utf8 => pyarrow.call0("utf8"),
         DataType::LargeUtf8 => pyarrow.call0("large_utf8"),
-        other => return Err(DataStoreError::ExecutionError(
-            format!("Type {:?} is still not valid.", other).to_owned(),
-        ).into()),
+        other => {
+            return Err(DataStoreError::ExecutionError(
+                format!("Type {:?} is still not valid.", other).to_owned(),
+            )
+            .into())
+        }
     }
 }
 
@@ -93,7 +97,10 @@ fn to_py_array<'a>(array: &ArrayRef, py: Python, pyarrow: &'a PyModule) -> Resul
 
     let data = array.data();
 
-    let null_buffer = data.null_buffer().map_or_else(|| none.extract(py), |buffer| init_py_buffer(buffer, pyarrow))?;
+    let null_buffer = data.null_buffer().map_or_else(
+        || none.extract(py),
+        |buffer| init_py_buffer(buffer, pyarrow),
+    )?;
 
     let mut py_buffers: Vec<&PyAny> = vec![null_buffer];
     for buffer in data.buffers() {
@@ -113,8 +120,12 @@ fn to_py_array<'a>(array: &ArrayRef, py: Python, pyarrow: &'a PyModule) -> Resul
     Ok(PyObject::from(array))
 }
 
-fn to_py_batch<'a>(batch: &RecordBatch, py: Python, pyarrow: &'a PyModule) -> Result<PyObject, PyErr> {
-    let mut py_arrays =  vec![];
+fn to_py_batch<'a>(
+    batch: &RecordBatch,
+    py: Python,
+    pyarrow: &'a PyModule,
+) -> Result<PyObject, PyErr> {
+    let mut py_arrays = vec![];
     let mut py_names = vec![];
 
     let schema = batch.schema();
@@ -125,7 +136,9 @@ fn to_py_batch<'a>(batch: &RecordBatch, py: Python, pyarrow: &'a PyModule) -> Re
         py_names.push(field.name());
     }
 
-    let record = pyarrow.getattr("RecordBatch")?.call_method1("from_arrays", (py_arrays, py_names))?;
+    let record = pyarrow
+        .getattr("RecordBatch")?
+        .call_method1("from_arrays", (py_arrays, py_names))?;
 
     Ok(PyObject::from(record))
 }
@@ -137,7 +150,7 @@ pub fn to_py(batches: &Vec<RecordBatch>) -> Result<PyObject, PyErr> {
     let pyarrow = PyModule::import(py, "pyarrow")?;
     let builtins = PyModule::import(py, "builtins")?;
 
-    let mut py_batches =  vec![];
+    let mut py_batches = vec![];
     for batch in batches {
         py_batches.push(to_py_batch(batch, py, pyarrow)?);
     }

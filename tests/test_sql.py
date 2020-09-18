@@ -164,13 +164,13 @@ class TestCase(unittest.TestCase):
             pyarrow.array([False, True, False])
         )
 
-    def test_udf_other(self):
+    def test_udf_nulls(self):
         self._test_udf(
             lambda x: abs(x) if x is not None else None,
             ['float64'],
             'float64',
-            pyarrow.array([-1.2, -1.3, 1.2], None),
-            pyarrow.array([1.2, 1.3, 1.2], None)
+            pyarrow.array([-1.2, None, 1.2], None),
+            pyarrow.array([1.2, None, 1.2], None)
         )
 
 class TestIO(unittest.TestCase):

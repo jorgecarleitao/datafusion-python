@@ -73,7 +73,7 @@ impl ExecutionContext {
             name.into(),
             args_types.clone(),
             return_type.clone(),
-            udf::udf(func, args_types, return_type)
+            udf::udf(func, args_types, return_type),
         ));
         Ok(())
     }

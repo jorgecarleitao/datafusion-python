@@ -2,12 +2,12 @@ use std::sync::Arc;
 
 use pyo3::{prelude::*, types::PyTuple};
 
-use arrow::datatypes::DataType;
-use arrow::array::PrimitiveArrayOps;
 use arrow::array;
+use arrow::array::PrimitiveArrayOps;
+use arrow::datatypes::DataType;
 
-use datafusion::physical_plan::functions::ScalarFunctionImplementation;
 use datafusion::error::ExecutionError;
+use datafusion::physical_plan::functions::ScalarFunctionImplementation;
 
 macro_rules! to_primitive {
     ($VALUES:ident, $ARRAY_TY:ident) => {{
@@ -21,16 +21,23 @@ macro_rules! to_primitive {
 macro_rules! to_native {
     ($VALUES:ident, $BUILDER:ident, $TY:ident, $SIZE_HINT:ident) => {{
         let mut builder = array::$BUILDER::new($SIZE_HINT);
-        $VALUES
-            .iter()
-            .map(|x| x.extract::<$TY>().unwrap())
-            .for_each(|x| builder.append_value(x).unwrap());
+        $VALUES.iter().for_each(|x| {
+            if x.is_none() {
+                builder.append_null().unwrap();
+            } else {
+                builder.append_value(x.extract::<$TY>().unwrap()).unwrap();
+            }
+        });
         Ok(Arc::new(builder.finish()))
     }};
 }
 
 /// creates a DataFusion's UDF implementation from a python function
-pub fn udf(func: PyObject, args_types: Vec<DataType>, return_type: Arc<DataType>) -> ScalarFunctionImplementation {
+pub fn udf(
+    func: PyObject,
+    args_types: Vec<DataType>,
+    return_type: Arc<DataType>,
+) -> ScalarFunctionImplementation {
     Arc::new(
         move |args: &[array::ArrayRef]| -> Result<array::ArrayRef, ExecutionError> {
             let capacity = args[0].len();
@@ -84,26 +91,18 @@ pub fn udf(func: PyObject, args_types: Vec<DataType>, return_type: Arc<DataType>
                 let value = any.call(values, None);
                 let value = match value {
                     Ok(n) => Ok(n),
-                    Err(data) => {
-                        Err(ExecutionError::General(format!("{:?}", data).to_owned()))
-                    }
+                    Err(data) => Err(ExecutionError::General(format!("{:?}", data).to_owned())),
                 }?;
                 final_values.push(value);
             }
 
-            // 3. cast the arguments back to Rust-Native
+            // 3. cast the result to arrow::array::Array
             match return_type.as_ref() {
-                DataType::Float64 => {
-                    to_native!(final_values, Float64Builder, f64, capacity)
-                }
-                DataType::Float32 => {
-                    to_native!(final_values, Float32Builder, f32, capacity)
-                }
+                DataType::Float64 => to_native!(final_values, Float64Builder, f64, capacity),
+                DataType::Float32 => to_native!(final_values, Float32Builder, f32, capacity),
                 DataType::Int32 => to_native!(final_values, Int32Builder, i32, capacity),
                 DataType::Int64 => to_native!(final_values, Int64Builder, i64, capacity),
-                DataType::Boolean => {
-                    to_native!(final_values, BooleanBuilder, bool, capacity)
-                }
+                DataType::Boolean => to_native!(final_values, BooleanBuilder, bool, capacity),
                 other => Err(ExecutionError::NotImplemented(
                     format!(
                         "Datatype \"{:?}\" is still not implemented as a return type.",
