@@ -6,8 +6,8 @@ edition = "2018"
 
 [dependencies]
 pyo3 = { version = "0.11.1", features = ["extension-module"] }
-datafusion = { git = "https://github.com/apache/arrow.git", rev = "df3bee2" }
-arrow = { git = "https://github.com/apache/arrow.git", rev = "df3bee2" }
+datafusion = { git = "https://github.com/apache/arrow.git", rev = "1f30466" }
+arrow = { git = "https://github.com/apache/arrow.git", rev = "1f30466" }
 thiserror = "^1.0"
 
 [lib]
