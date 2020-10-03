@@ -5,9 +5,10 @@ authors = ["Jorge C. Leitao <jorgecarleitao@gmail.com>"]
 edition = "2018"
 
 [dependencies]
+tokio = "0.2.22"
 pyo3 = { version = "0.11.1", features = ["extension-module"] }
-datafusion = { git = "https://github.com/apache/arrow.git", rev = "1f30466" }
-arrow = { git = "https://github.com/apache/arrow.git", rev = "1f30466" }
+datafusion = { git = "https://github.com/apache/arrow.git", rev = "551edca" }
+arrow = { git = "https://github.com/apache/arrow.git", rev = "551edca" }
 thiserror = "^1.0"
 
 [lib]

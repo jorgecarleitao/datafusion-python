@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use pyo3::prelude::*;
+use tokio::runtime::Runtime;
 
 use std::collections::HashSet;
 
@@ -34,9 +35,12 @@ impl ExecutionContext {
             .ctx
             .sql(query)
             .map_err(|e| -> errors::DataFusionError { e.into() })?;
-        let batches = df
-            .collect()
-            .map_err(|e| -> errors::DataFusionError { e.into() })?;
+
+        let mut rt = Runtime::new().unwrap();
+
+        let batches = rt.block_on(async {
+            df.collect().await.map_err(|e| -> errors::DataFusionError { e.into() })
+        })?;
         to_py::to_py(&batches)
     }
 
