@@ -197,6 +197,8 @@ class TestCase(unittest.TestCase):
             pyarrow.array([-1.2, None, 1.2])
         )
 
+    # this is awaiting for the C data interface to land in Arrow Rust
+    @unittest.expectedFailure
     def test_array_udf(self):
         self._test_array_udf(
             lambda x: x.is_null(),
