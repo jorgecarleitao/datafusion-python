@@ -11,51 +11,7 @@ import datafusion
 # used to write parquet files
 import pyarrow.parquet
 
-
-def _data():
-    numpy.random.seed(1)
-    data = numpy.concatenate([
-        numpy.random.normal(0, 0.01, size=50),
-        numpy.random.normal(50, 0.01, size=50)
-    ])
-    return pyarrow.array(data)
-
-
-def _data_with_nans():
-    data = numpy.random.normal(0, 0.01, size=50)
-    mask = numpy.random.randint(0, 2, size=50)
-    data[mask==0] = numpy.NaN
-    return data
-
-
-def _data_datetime(f):
-    data = [
-        datetime.datetime.now(),
-        datetime.datetime.now() - datetime.timedelta(days=1),
-        datetime.datetime.now() + datetime.timedelta(days=1),
-    ]
-    return pyarrow.array(data, type=pyarrow.timestamp(f), mask=numpy.array([False, True, False]))
-
-
-def _data_timedelta(f):
-    data = [
-        datetime.timedelta(days=100),
-        datetime.timedelta(days=1),
-        datetime.timedelta(seconds=1),
-    ]
-    return pyarrow.array(data, type=pyarrow.duration(f), mask=numpy.array([False, True, False]))
-
-
-def _data_binary_other():
-    return numpy.array([
-        1, 0, 0
-    ], dtype='u4')
-
-
-def _write_parquet(path, data):
-    table = pyarrow.Table.from_arrays([data], names=['a'])
-    pyarrow.parquet.write_table(table, path)
-    return path
+from .generic import *
 
 
 class TestCase(unittest.TestCase):
@@ -69,14 +25,13 @@ class TestCase(unittest.TestCase):
         shutil.rmtree(self.test_dir)
 
     def test_no_table(self):
-        ctx = datafusion.ExecutionContext()
         with self.assertRaises(Exception):
             datafusion.Context().sql("SELECT a FROM b")
 
     def test_register(self):
         ctx = datafusion.ExecutionContext()
 
-        path = _write_parquet(os.path.join(self.test_dir, 'a.parquet'), _data())
+        path = write_parquet(os.path.join(self.test_dir, 'a.parquet'), data())
 
         ctx.register_parquet("t", path)
 
@@ -86,7 +41,7 @@ class TestCase(unittest.TestCase):
         ctx = datafusion.ExecutionContext()
 
         # single column, "a"
-        path = _write_parquet(os.path.join(self.test_dir, 'a.parquet'), _data())
+        path = write_parquet(os.path.join(self.test_dir, 'a.parquet'), data())
         ctx.register_parquet("t", path)
 
         self.assertEqual(ctx.tables(), {"t"})
@@ -122,7 +77,7 @@ class TestCase(unittest.TestCase):
         """
         ctx = datafusion.ExecutionContext()
 
-        path = _write_parquet(os.path.join(self.test_dir, 'a.parquet'), _data())
+        path = write_parquet(os.path.join(self.test_dir, 'a.parquet'), data())
         ctx.register_parquet("t", path)
 
         valid_types = [
@@ -144,7 +99,7 @@ class TestCase(unittest.TestCase):
         ctx = datafusion.ExecutionContext()
 
         # write to disk
-        path = _write_parquet(os.path.join(self.test_dir, 'a.parquet'), array)
+        path = write_parquet(os.path.join(self.test_dir, 'a.parquet'), array)
         ctx.register_parquet("t", path)
 
         ctx.register_udf("udf", udf, args, return_type)
@@ -177,7 +132,7 @@ class TestCase(unittest.TestCase):
         ctx = datafusion.ExecutionContext()
 
         # write to disk
-        path = _write_parquet(os.path.join(self.test_dir, 'a.parquet'), array)
+        path = write_parquet(os.path.join(self.test_dir, 'a.parquet'), array)
         ctx.register_parquet("t", path)
 
         ctx.register_array_udf("udf", udf, args, return_type)
@@ -222,7 +177,7 @@ class TestIO(unittest.TestCase):
         ctx = datafusion.ExecutionContext()
 
         # write to disk
-        path = _write_parquet(os.path.join(self.test_dir, 'a.parquet'), data)
+        path = write_parquet(os.path.join(self.test_dir, 'a.parquet'), data)
         ctx.register_parquet("t", path)
 
         batches = ctx.sql("SELECT a AS tt FROM t")
@@ -232,7 +187,7 @@ class TestIO(unittest.TestCase):
         numpy.testing.assert_equal(data, result)
 
     def test_nans(self):
-        self._test_data(_data_with_nans())
+        self._test_data(data_with_nans())
 
     def test_utf8(self):
         array = pyarrow.array(["a", "b", "c"], pyarrow.utf8(), numpy.array([False, True, False]))
@@ -247,43 +202,38 @@ class TestIO(unittest.TestCase):
     # Error from Arrow
     @unittest.expectedFailure
     def test_datetime_s(self):
-        self._test_data(_data_datetime('s'))
+        self._test_data(data_datetime('s'))
 
     def test_datetime_ms(self):
-        self._test_data(_data_datetime('ms'))
+        self._test_data(data_datetime('ms'))
 
     def test_datetime_us(self):
-        self._test_data(_data_datetime('us'))
+        self._test_data(data_datetime('us'))
 
     # Not writtable to parquet
     @unittest.expectedFailure
     def test_datetime_ns(self):
-        self._test_data(_data_datetime('ns'))
+        self._test_data(data_datetime('ns'))
 
     # Not writtable to parquet
     @unittest.expectedFailure
     def test_timedelta_s(self):
-        self._test_data(_data_timedelta('s'))
+        self._test_data(data_timedelta('s'))
 
     # Not writtable to parquet
     @unittest.expectedFailure
     def test_timedelta_ms(self):
-        self._test_data(_data_timedelta('ms'))
+        self._test_data(data_timedelta('ms'))
 
     # Not writtable to parquet
     @unittest.expectedFailure
     def test_timedelta_us(self):
-        self._test_data(_data_timedelta('us'))
+        self._test_data(data_timedelta('us'))
 
     # Not writtable to parquet
     @unittest.expectedFailure
     def test_timedelta_ns(self):
-        self._test_data(_data_timedelta('ns'))
-
-    # Not writtable to parquet
-    @unittest.expectedFailure
-    def test_timedelta_ns(self):
-        self._test_data(_data_timedelta('ns'))
+        self._test_data(data_timedelta('ns'))
 
     def test_date32(self):
         array = pyarrow.array([
@@ -308,7 +258,7 @@ class TestIO(unittest.TestCase):
         self._test_data(array)
 
     def test_binary_other(self):
-        self._test_data(_data_binary_other())
+        self._test_data(data_binary_other())
 
     def test_bool(self):
         array = pyarrow.array([False, True, True], None, numpy.array([False, True, False]))
