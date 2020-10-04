@@ -7,8 +7,8 @@ edition = "2018"
 [dependencies]
 tokio = "0.2.22"
 pyo3 = { version = "0.11.1", features = ["extension-module"] }
-datafusion = { git = "https://github.com/apache/arrow.git", rev = "551edca" }
-arrow = { git = "https://github.com/apache/arrow.git", rev = "551edca" }
+datafusion = { git = "https://github.com/jorgecarleitao/arrow.git", rev = "97a12b0" }
+arrow = { git = "https://github.com/jorgecarleitao/arrow.git", rev = "97a12b0" }
 thiserror = "^1.0"
 
 [lib]

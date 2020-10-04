@@ -26,7 +26,7 @@ class TestCase(unittest.TestCase):
 
     def test_no_table(self):
         with self.assertRaises(Exception):
-            datafusion.Context().sql("SELECT a FROM b")
+            datafusion.Context().sql("SELECT a FROM b").collect()
 
     def test_register(self):
         ctx = datafusion.ExecutionContext()
@@ -49,15 +49,15 @@ class TestCase(unittest.TestCase):
         # count
         expected = pyarrow.array([100], pyarrow.uint64())
         expected = [pyarrow.RecordBatch.from_arrays([expected], ['COUNT(a)'])]
-        self.assertEqual(expected, ctx.sql("SELECT COUNT(a) FROM t"))
+        self.assertEqual(expected, ctx.sql("SELECT COUNT(a) FROM t").collect())
 
         # where
         expected = pyarrow.array([50], pyarrow.uint64())
         expected = [pyarrow.RecordBatch.from_arrays([expected], ['COUNT(a)'])]
-        self.assertEqual(expected, ctx.sql("SELECT COUNT(a) FROM t WHERE a > 10"))
+        self.assertEqual(expected, ctx.sql("SELECT COUNT(a) FROM t WHERE a > 10").collect())
 
         # group by
-        result = ctx.sql("SELECT CAST(a as int), COUNT(a) FROM t GROUP BY CAST(a as int)")
+        result = ctx.sql("SELECT CAST(a as int), COUNT(a) FROM t GROUP BY CAST(a as int)").collect()
 
         expected_cast = pyarrow.array([50,  0, 49], pyarrow.int32())
         expected_count = pyarrow.array([31, 50, 19], pyarrow.uint64())
@@ -65,7 +65,7 @@ class TestCase(unittest.TestCase):
         numpy.testing.assert_equal(expected, result)
 
         # order by
-        result = ctx.sql("SELECT a, CAST(a AS int) FROM t ORDER BY a DESC LIMIT 2")
+        result = ctx.sql("SELECT a, CAST(a AS int) FROM t ORDER BY a DESC LIMIT 2").collect()
         expected_a = pyarrow.array([50.0219, 50.0152], pyarrow.float64())
         expected_cast = pyarrow.array([50, 50], pyarrow.int32())
         expected = [pyarrow.RecordBatch.from_arrays([expected_a, expected_cast], ['a', 'CAST(a as Int32)'])]
@@ -92,7 +92,7 @@ class TestCase(unittest.TestCase):
         select = ', '.join([f'CAST(9 AS {t})' for t in valid_types])
 
         # can execute, which implies that we can cast
-        ctx.sql(f'SELECT {select} FROM t')
+        ctx.sql(f'SELECT {select} FROM t').collect()
 
     def _test_udf(self, udf, args, return_type, array, expected):
 
@@ -104,7 +104,7 @@ class TestCase(unittest.TestCase):
 
         ctx.register_udf("udf", udf, args, return_type)
 
-        batches = ctx.sql("SELECT udf(a) AS tt FROM t")
+        batches = ctx.sql("SELECT udf(a) AS tt FROM t").collect()
 
         result = batches[0].column(0)
 
@@ -137,7 +137,7 @@ class TestCase(unittest.TestCase):
 
         ctx.register_array_udf("udf", udf, args, return_type)
 
-        batches = ctx.sql("SELECT udf(a) AS tt FROM t")
+        batches = ctx.sql("SELECT udf(a) AS tt FROM t").collect()
 
         result = batches[0].column(0)
 
@@ -180,7 +180,7 @@ class TestIO(unittest.TestCase):
         path = write_parquet(os.path.join(self.test_dir, 'a.parquet'), data)
         ctx.register_parquet("t", path)
 
-        batches = ctx.sql("SELECT a AS tt FROM t")
+        batches = ctx.sql("SELECT a AS tt FROM t").collect()
 
         result = batches[0].column(0)
 
