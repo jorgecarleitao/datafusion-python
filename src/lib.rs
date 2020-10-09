@@ -6,10 +6,12 @@ use tokio::runtime::Runtime;
 
 use std::collections::HashSet;
 
-use datafusion::{execution::context::ExecutionContextState, logical_plan};
-use datafusion::{error::ExecutionError, logical_plan::Expr as _Expr, logical_plan::LogicalPlanBuilder};
 use datafusion::execution::context::ExecutionContext as _ExecutionContext;
 use datafusion::logical_plan::create_udf;
+use datafusion::{
+    error::ExecutionError, logical_plan::Expr as _Expr, logical_plan::LogicalPlanBuilder,
+};
+use datafusion::{execution::context::ExecutionContextState, logical_plan};
 
 use arrow::datatypes::DataType;
 mod errors;
@@ -31,23 +33,30 @@ struct DataFrame {
 impl DataFrame {
     fn select(&self, expressions: Vec<Expr>) -> PyResult<Self> {
         let builder = LogicalPlanBuilder::from(&self.plan);
-        let builder = wrap(builder.project(expressions.iter().map(|e| {
-            e.expr.clone()
-        }).collect()))?;
+        let builder = wrap(builder.project(expressions.iter().map(|e| e.expr.clone()).collect()))?;
         let plan = wrap(builder.build())?;
 
-        Ok(DataFrame { ctx_state: self.ctx_state.clone(), plan })
+        Ok(DataFrame {
+            ctx_state: self.ctx_state.clone(),
+            plan,
+        })
     }
 
     fn collect(&self) -> PyResult<PyObject> {
         let mut rt = Runtime::new().unwrap();
 
         let ctx = _ExecutionContext::from(self.ctx_state.clone());
-        let plan = ctx.optimize(&self.plan).map_err(|e| -> errors::DataFusionError { e.into() })?;
-        let plan = ctx.create_physical_plan(&plan).map_err(|e| -> errors::DataFusionError { e.into() })?;
+        let plan = ctx
+            .optimize(&self.plan)
+            .map_err(|e| -> errors::DataFusionError { e.into() })?;
+        let plan = ctx
+            .create_physical_plan(&plan)
+            .map_err(|e| -> errors::DataFusionError { e.into() })?;
 
         let batches = rt.block_on(async {
-            ctx.collect(plan).await.map_err(|e| -> errors::DataFusionError { e.into() })
+            ctx.collect(plan)
+                .await
+                .map_err(|e| -> errors::DataFusionError { e.into() })
         })?;
         to_py::to_py(&batches)
     }
@@ -77,7 +86,10 @@ impl ExecutionContext {
             .ctx
             .sql(query)
             .map_err(|e| -> errors::DataFusionError { e.into() })?;
-        Ok(DataFrame { ctx_state: self.ctx.state.clone(), plan: df.to_logical_plan() })
+        Ok(DataFrame {
+            ctx_state: self.ctx.state.clone(),
+            plan: df.to_logical_plan(),
+        })
     }
 
     fn register_parquet(&mut self, name: &str, path: &str) -> PyResult<()> {
@@ -130,7 +142,7 @@ impl ExecutionContext {
             name.into(),
             args_types.clone(),
             return_type.clone(),
-            udf::array_udf(func, args_types, return_type),
+            udf::array_udf(func, args_types),
         ));
         Ok(())
     }
@@ -144,14 +156,18 @@ impl ExecutionContext {
 #[pyfunction]
 #[text_signature = "(name)"]
 fn col(name: &str) -> Expr {
-    return Expr { expr: logical_plan::col(name)}
+    return Expr {
+        expr: logical_plan::col(name),
+    };
 }
 
 /// Returns a literal expression
 #[pyfunction]
 #[text_signature = "(value)"]
 fn lit(value: i32) -> Expr {
-    return Expr { expr: logical_plan::lit(value)}
+    return Expr {
+        expr: logical_plan::lit(value),
+    };
 }
 
 /// The module DataFusion...
@@ -166,13 +182,13 @@ fn datafusion(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_wrapped(wrap_pyfunction!(col))?;
 
     for data_type in types::DATA_TYPES {
-        m.add(data_type, data_type)?;
+        m.add(data_type, *data_type)?;
     }
 
     Ok(())
 }
 
-mod to_arrow;
 mod to_py;
+mod to_rust;
 mod types;
 mod udf;
