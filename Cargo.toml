@@ -1,5 +1,5 @@
 [package]
-name = "rust-python-example"
+name = "datafusion"
 version = "0.1.0"
 authors = ["Jorge C. Leitao <jorgecarleitao@gmail.com>"]
 edition = "2018"

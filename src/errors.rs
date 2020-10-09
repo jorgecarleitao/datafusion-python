@@ -38,3 +38,7 @@ impl From<ArrowError> for DataFusionError {
         DataFusionError::ArrowError(err)
     }
 }
+
+pub(crate) fn wrap<T>(a: Result<T, ExecutionError>) -> Result<T, DataFusionError> {
+    Ok(a?)
+}

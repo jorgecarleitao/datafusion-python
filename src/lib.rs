@@ -1,74 +1,22 @@
 use std::sync::Arc;
 
-use logical_plan::LogicalPlan;
-use pyo3::{prelude::*, wrap_pyfunction};
-use tokio::runtime::Runtime;
+use pyo3::prelude::*;
 
 use std::collections::HashSet;
 
+use arrow::datatypes::DataType;
+use datafusion::error::ExecutionError;
 use datafusion::execution::context::ExecutionContext as _ExecutionContext;
 use datafusion::logical_plan::create_udf;
-use datafusion::{
-    error::ExecutionError, logical_plan::Expr as _Expr, logical_plan::LogicalPlanBuilder,
-};
-use datafusion::{execution::context::ExecutionContextState, logical_plan};
 
-use arrow::datatypes::DataType;
+mod dataframe;
 mod errors;
-
-/// An expression that can be used on a DataFrame
-#[pyclass]
-#[derive(Debug, Clone)]
-struct Expr {
-    expr: _Expr,
-}
-
-#[pyclass(unsendable)]
-struct DataFrame {
-    ctx_state: ExecutionContextState,
-    plan: LogicalPlan,
-}
-
-#[pymethods]
-impl DataFrame {
-    fn select(&self, expressions: Vec<Expr>) -> PyResult<Self> {
-        let builder = LogicalPlanBuilder::from(&self.plan);
-        let builder = wrap(builder.project(expressions.iter().map(|e| e.expr.clone()).collect()))?;
-        let plan = wrap(builder.build())?;
-
-        Ok(DataFrame {
-            ctx_state: self.ctx_state.clone(),
-            plan,
-        })
-    }
-
-    fn collect(&self) -> PyResult<PyObject> {
-        let mut rt = Runtime::new().unwrap();
-
-        let ctx = _ExecutionContext::from(self.ctx_state.clone());
-        let plan = ctx
-            .optimize(&self.plan)
-            .map_err(|e| -> errors::DataFusionError { e.into() })?;
-        let plan = ctx
-            .create_physical_plan(&plan)
-            .map_err(|e| -> errors::DataFusionError { e.into() })?;
-
-        let batches = rt.block_on(async {
-            ctx.collect(plan)
-                .await
-                .map_err(|e| -> errors::DataFusionError { e.into() })
-        })?;
-        to_py::to_py(&batches)
-    }
-}
+mod expression;
+mod functions;
 
 #[pyclass(unsendable)]
 struct ExecutionContext {
     ctx: _ExecutionContext,
-}
-
-fn wrap<T>(a: Result<T, ExecutionError>) -> Result<T, errors::DataFusionError> {
-    Ok(a?)
 }
 
 #[pymethods]
@@ -81,19 +29,19 @@ impl ExecutionContext {
     }
 
     /// Returns a DataFrame whose plan corresponds to the SQL statement.
-    fn sql(&mut self, query: &str) -> PyResult<DataFrame> {
+    fn sql(&mut self, query: &str) -> PyResult<dataframe::DataFrame> {
         let df = self
             .ctx
             .sql(query)
             .map_err(|e| -> errors::DataFusionError { e.into() })?;
-        Ok(DataFrame {
-            ctx_state: self.ctx.state.clone(),
-            plan: df.to_logical_plan(),
-        })
+        Ok(dataframe::DataFrame::new(
+            self.ctx.state.clone(),
+            df.to_logical_plan(),
+        ))
     }
 
     fn register_parquet(&mut self, name: &str, path: &str) -> PyResult<()> {
-        wrap(self.ctx.register_parquet(name, path))?;
+        errors::wrap(self.ctx.register_parquet(name, path))?;
         Ok(())
     }
 
@@ -105,13 +53,13 @@ impl ExecutionContext {
         return_type: &str,
     ) -> PyResult<()> {
         // map strings for declared types to cases from DataType
-        let args_types: Vec<DataType> = wrap(
+        let args_types: Vec<DataType> = errors::wrap(
             args_types
                 .iter()
                 .map(|x| types::data_type(&x))
                 .collect::<Result<Vec<DataType>, ExecutionError>>(),
         )?;
-        let return_type = Arc::new(wrap(types::data_type(return_type))?);
+        let return_type = Arc::new(errors::wrap(types::data_type(return_type))?);
 
         self.ctx.register_udf(create_udf(
             name.into(),
@@ -130,13 +78,13 @@ impl ExecutionContext {
         return_type: &str,
     ) -> PyResult<()> {
         // map strings for declared types to cases from DataType
-        let args_types: Vec<DataType> = wrap(
+        let args_types: Vec<DataType> = errors::wrap(
             args_types
                 .iter()
                 .map(|x| types::data_type(&x))
                 .collect::<Result<Vec<DataType>, ExecutionError>>(),
         )?;
-        let return_type = Arc::new(wrap(types::data_type(return_type))?);
+        let return_type = Arc::new(errors::wrap(types::data_type(return_type))?);
 
         self.ctx.register_udf(create_udf(
             name.into(),
@@ -152,34 +100,16 @@ impl ExecutionContext {
     }
 }
 
-/// Expression representing a column
-#[pyfunction]
-#[text_signature = "(name)"]
-fn col(name: &str) -> Expr {
-    return Expr {
-        expr: logical_plan::col(name),
-    };
-}
-
-/// Returns a literal expression
-#[pyfunction]
-#[text_signature = "(value)"]
-fn lit(value: i32) -> Expr {
-    return Expr {
-        expr: logical_plan::lit(value),
-    };
-}
-
-/// The module DataFusion...
+/// DataFusion.
 #[pymodule]
-fn datafusion(_py: Python, m: &PyModule) -> PyResult<()> {
+fn datafusion(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<ExecutionContext>()?;
-    m.add_class::<DataFrame>()?;
-    m.add_class::<Expr>()?;
+    m.add_class::<dataframe::DataFrame>()?;
+    m.add_class::<expression::Expression>()?;
 
-    // expressions
-    m.add_wrapped(wrap_pyfunction!(lit))?;
-    m.add_wrapped(wrap_pyfunction!(col))?;
+    let functions = PyModule::new(py, "functions")?;
+    functions::init(functions)?;
+    m.add_submodule(functions)?;
 
     for data_type in types::DATA_TYPES {
         m.add(data_type, *data_type)?;
