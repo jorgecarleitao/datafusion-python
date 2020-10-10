@@ -31,6 +31,36 @@ impl PyNumberProtocol for Expression {
             expr: lhs.expr - rhs.expr,
         })
     }
+
+    fn __truediv__(lhs: Expression, rhs: Expression) -> PyResult<Expression> {
+        Ok(Expression {
+            expr: lhs.expr / rhs.expr,
+        })
+    }
+
+    fn __mul__(lhs: Expression, rhs: Expression) -> PyResult<Expression> {
+        Ok(Expression {
+            expr: lhs.expr * rhs.expr,
+        })
+    }
+
+    fn __and__(lhs: Expression, rhs: Expression) -> PyResult<Expression> {
+        Ok(Expression {
+            expr: lhs.expr.and(rhs.expr),
+        })
+    }
+
+    fn __or__(lhs: Expression, rhs: Expression) -> PyResult<Expression> {
+        Ok(Expression {
+            expr: lhs.expr.or(rhs.expr),
+        })
+    }
+
+    fn __invert__(&self) -> PyResult<Expression> {
+        Ok(Expression {
+            expr: self.expr.not(),
+        })
+    }
 }
 
 // these are here until https://github.com/PyO3/pyo3/issues/1219 is closed and released
@@ -40,6 +70,13 @@ impl Expression {
     pub fn gt(&self, rhs: Expression) -> PyResult<Expression> {
         Ok(Expression {
             expr: self.expr.gt(rhs.expr),
+        })
+    }
+
+    /// assign a name to the expression
+    pub fn alias(&self, name: &str) -> PyResult<Expression> {
+        Ok(Expression {
+            expr: self.expr.alias(name),
         })
     }
 }
