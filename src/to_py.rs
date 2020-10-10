@@ -45,8 +45,8 @@ fn to_py_batch<'a>(
     Ok(PyObject::from(record))
 }
 
-/// Converts a Vec<RecordBatch> into a RecordBatch represented in Python
-pub fn to_py(batches: &Vec<RecordBatch>) -> Result<PyObject, PyErr> {
+/// Converts a Vec<RecordBatch> into a Vec<RecordBatch> represented in PyArrow
+pub fn to_py(batches: &Vec<RecordBatch>) -> PyResult<PyObject> {
     let gil = pyo3::Python::acquire_gil();
     let py = gil.python();
     let pyarrow = PyModule::import(py, "pyarrow")?;

@@ -1,5 +1,5 @@
 use logical_plan::LogicalPlan;
-use pyo3::prelude::*;
+use pyo3::{prelude::*, types::PyTuple};
 use tokio::runtime::Runtime;
 
 use datafusion::execution::context::ExecutionContext as _ExecutionContext;
@@ -9,6 +9,9 @@ use datafusion::{execution::context::ExecutionContextState, logical_plan};
 use crate::expression;
 use crate::{errors, to_py};
 
+/// A DataFrame is a representation of a logical plan and an API to compose statements.
+/// Use it to build a plan and `.collect()` to execute the plan and collect the result.
+/// The actual execution of a plan runs natively on Rust and Arrow on a multi-threaded environment.
 #[pyclass(unsendable)]
 pub(crate) struct DataFrame {
     ctx_state: ExecutionContextState,
@@ -24,7 +27,13 @@ impl DataFrame {
 
 #[pymethods]
 impl DataFrame {
-    fn select(&self, expressions: Vec<expression::Expression>) -> PyResult<Self> {
+    /// Select `expressions` from the existing DataFrame.
+    #[args(args = "*")]
+    fn select(&self, args: &PyTuple) -> PyResult<Self> {
+        let expressions: Vec<expression::Expression> = args
+            .iter()
+            .map(|e| e.extract::<expression::Expression>())
+            .collect::<PyResult<_>>()?;
         let builder = LogicalPlanBuilder::from(&self.plan);
         let builder =
             errors::wrap(builder.project(expressions.iter().map(|e| e.expr.clone()).collect()))?;
@@ -36,6 +45,32 @@ impl DataFrame {
         })
     }
 
+    /// Filter according to the `predicate` expression
+    fn filter(&self, predicate: expression::Expression) -> PyResult<Self> {
+        let builder = LogicalPlanBuilder::from(&self.plan);
+        let builder = errors::wrap(builder.filter(predicate.expr))?;
+        let plan = errors::wrap(builder.build())?;
+
+        Ok(DataFrame {
+            ctx_state: self.ctx_state.clone(),
+            plan,
+        })
+    }
+
+    /// Limits the plan to return at most `count` rows
+    fn limit(&self, count: usize) -> PyResult<Self> {
+        let builder = LogicalPlanBuilder::from(&self.plan);
+        let builder = errors::wrap(builder.limit(count))?;
+        let plan = errors::wrap(builder.build())?;
+
+        Ok(DataFrame {
+            ctx_state: self.ctx_state.clone(),
+            plan,
+        })
+    }
+
+    /// Executes the plan, returning a list of `RecordBatch`es.
+    /// Unless some order is specified in the plan, there is no guarantee of the order of the result
     fn collect(&self) -> PyResult<PyObject> {
         let mut rt = Runtime::new().unwrap();
 

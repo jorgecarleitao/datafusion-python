@@ -1,18 +1,25 @@
+use rand::distributions::Alphanumeric;
+use rand::Rng;
+
 use std::sync::Arc;
 
 use pyo3::prelude::*;
 
 use std::collections::HashSet;
 
-use arrow::datatypes::DataType;
-use datafusion::error::ExecutionError;
+use arrow::{datatypes::DataType, record_batch::RecordBatch};
 use datafusion::execution::context::ExecutionContext as _ExecutionContext;
 use datafusion::logical_plan::create_udf;
+use datafusion::{datasource::MemTable, error::ExecutionError};
 
 mod dataframe;
 mod errors;
 mod expression;
 mod functions;
+mod to_py;
+mod to_rust;
+mod types;
+mod udf;
 
 #[pyclass(unsendable)]
 struct ExecutionContext {
@@ -37,6 +44,36 @@ impl ExecutionContext {
         Ok(dataframe::DataFrame::new(
             self.ctx.state.clone(),
             df.to_logical_plan(),
+        ))
+    }
+
+    fn create_dataframe(
+        &mut self,
+        partitions: Vec<Vec<PyObject>>,
+        py: Python,
+    ) -> PyResult<dataframe::DataFrame> {
+        let partitions: Vec<Vec<RecordBatch>> = partitions
+            .iter()
+            .map(|batches| {
+                batches
+                    .iter()
+                    .map(|batch| to_rust::to_rust_batch(batch.as_ref(py)))
+                    .collect()
+            })
+            .collect::<PyResult<_>>()?;
+
+        let table = errors::wrap(MemTable::new(partitions[0][0].schema(), partitions))?;
+
+        // generate a random (unique) name for this table
+        let name = rand::thread_rng()
+            .sample_iter(&Alphanumeric)
+            .take(10)
+            .collect::<String>();
+
+        self.ctx.register_table(&name, Box::new(table));
+        Ok(dataframe::DataFrame::new(
+            self.ctx.state.clone(),
+            errors::wrap(self.ctx.table(&name))?.to_logical_plan(),
         ))
     }
 
@@ -117,8 +154,3 @@ fn datafusion(py: Python, m: &PyModule) -> PyResult<()> {
 
     Ok(())
 }
-
-mod to_py;
-mod to_rust;
-mod types;
-mod udf;

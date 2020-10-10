@@ -1,8 +1,7 @@
 ## Datafusion with Python
 
 This is a Python library that binds to Apache's Arrow in-memory rust-based query engine [datafusion](https://github.com/apache/arrow/tree/master/rust/datafusion).
-It allows you to execute SQL queries against parquet or CSV files, and have the results converted back to
-pyarrow arrays.
+It allows you to build a Logical Plan through a DataFrame API against parquet or CSV files, and obtain the result back.
 
 Being written in rust, this code has strong assumptions about thread safety and lack of memory leaks.
 
@@ -12,21 +11,39 @@ We lock the GIL to convert the results back to pyarrow arrays and to run UFDs.
 
 Simple usage:
 
-```
+```python
 import datafusion
+import pyarrow
 
+# an alias
+f = datafusion.functions
 
+# create a context
 ctx = datafusion.ExecutionContext()
 
-ctx.register_parquet('t', path)
+# create a RecordBatch and a new DataFrame from it
+batch = pyarrow.RecordBatch.from_arrays(
+    [pyarrow.array([1, 2, 3]), pyarrow.array([4, 5, 6])],
+    names=["a", "b"],
+)
+df = ctx.create_dataframe([[batch]])
 
-result = ctx.sql('SELECT (a > 50), COUNT(a) FROM t GROUP BY CAST((a > 10.0) AS int)')
-# result is a list of pyarrow.RecordBatch
+# create a new statement
+df = df.select(
+    f.col("a") + f.col("b"),
+    f.col("a") - f.col("b"),
+)
+
+# execute and collect the first (and only) batch
+result = df.collect()[0]
+
+assert result.column(0) == pyarrow.array([5, 7, 9])
+assert result.column(1) == pyarrow.array([-3, -3, -3])
 ```
 
 UDF usage:
 
-```
+```python
 # name, function, input types, output types
 ctx.register_udf('my_abs', lambda x: abs(x), ['float64'], 'float64')
 

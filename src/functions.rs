@@ -4,8 +4,7 @@ use datafusion::logical_plan;
 
 use crate::expression;
 
-
-/// Expression representing a column
+/// Expression representing a column on the existing plan.
 #[pyfunction]
 #[text_signature = "(name)"]
 fn col(name: &str) -> expression::Expression {
@@ -14,7 +13,7 @@ fn col(name: &str) -> expression::Expression {
     };
 }
 
-/// Returns a literal expression
+/// Expression representing a constant value
 #[pyfunction]
 #[text_signature = "(value)"]
 fn lit(value: i32) -> expression::Expression {
