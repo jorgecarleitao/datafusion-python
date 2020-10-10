@@ -1,4 +1,5 @@
-on: [push]
+name: Tests
+on: [push, pull_request]
 
 jobs:
   test:
@@ -14,6 +15,3 @@ jobs:
       run: |
         docker build -t test .
         docker run --rm -t test
-
-# release manylinux: docker run --rm -it -v $(pwd):/io konstin2/maturin build
-# release macOS: 

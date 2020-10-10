@@ -54,6 +54,10 @@ df = df.select(udf(f.col("a")))
 
 ## How to install
 
+```bash
+pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple datafusion
+```
+
 We haven't configured CI/CD to publish wheels in pip yet and thus you can only install it in development.
 It requires cargo and rust. See below.
 
@@ -83,15 +87,3 @@ Whenever rust code changes (your changes or via git pull):
 venv/bin/maturin develop
 venv/bin/python -m unittest discover tests
 ```
-
-## TODOs
-
-* [x] Add support to Python UDFs
-* [x] Add support to nulls
-* [x] Add support to numeric types
-* [x] Add support to binary types
-* [x] Add support to strings
-* [x] Add support to datetime (`datetime64`)
-* [x] Add support to timedelta
-* [ ] Add CI/CD, including publish to Mac and manylinux via official docker
-* [ ] benchmarks
