@@ -61,7 +61,7 @@ class TestCase(unittest.TestCase):
     def test_udf(self):
         df = self._prepare()
 
-        # is_null is a pyspark function over arrays
+        # is_null is a pyarrow function over arrays
         udf = f.udf(lambda x: x.is_null(), [pyarrow.int64()], pyarrow.bool_())
 
         df = df.select(udf(f.col("a")))
