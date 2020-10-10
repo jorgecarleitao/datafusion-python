@@ -9,7 +9,7 @@ use arrow::{
 };
 use pyo3::{libc::uintptr_t, prelude::*};
 
-use crate::{errors, types::data_type_id};
+use crate::{errors, types::PyDataType};
 
 /// converts a pyarrow Array into a Rust Array
 pub fn to_rust(ob: &PyAny) -> PyResult<ArrayRef> {
@@ -39,8 +39,8 @@ pub fn to_rust_batch(batch: &PyAny) -> PyResult<RecordBatch> {
         .map(|(i, name)| {
             let field = schema.call_method1("field", (i,))?;
             let nullable = field.getattr("nullable")?.extract::<bool>()?;
-            let t = field.getattr("type")?.getattr("id")?.extract::<i32>()?;
-            let data_type = data_type_id(&t)?;
+            let py_data_type = field.getattr("type")?;
+            let data_type = py_data_type.extract::<PyDataType>()?.data_type;
             Ok(Field::new(name, data_type, nullable))
         })
         .collect::<PyResult<_>>()?;

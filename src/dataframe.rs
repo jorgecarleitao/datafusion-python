@@ -30,10 +30,7 @@ impl DataFrame {
     /// Select `expressions` from the existing DataFrame.
     #[args(args = "*")]
     fn select(&self, args: &PyTuple) -> PyResult<Self> {
-        let expressions: Vec<expression::Expression> = args
-            .iter()
-            .map(|e| e.extract::<expression::Expression>())
-            .collect::<PyResult<_>>()?;
+        let expressions = expression::from_tuple(args)?;
         let builder = LogicalPlanBuilder::from(&self.plan);
         let builder =
             errors::wrap(builder.project(expressions.iter().map(|e| e.expr.clone()).collect()))?;

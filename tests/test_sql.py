@@ -95,7 +95,6 @@ class TestCase(unittest.TestCase):
         ctx.sql(f'SELECT {select} FROM t').collect()
 
     def _test_udf(self, udf, args, return_type, array, expected):
-
         ctx = datafusion.ExecutionContext()
 
         # write to disk
@@ -110,53 +109,20 @@ class TestCase(unittest.TestCase):
 
         self.assertEqual(expected, result)
 
-    def test_null_args_udf(self):
+    def test_udf_identity(self):
         self._test_udf(
-            lambda x: x is None,
-            ['float64'],
-            'bool',
-            pyarrow.array([0, 1, 2], None, numpy.array([False, True, False])),
-            pyarrow.array([False, True, False])
-        )
-
-    def test_udf_nulls(self):
-        self._test_udf(
-            lambda x: abs(x) if x is not None else None,
-            ['float64'],
-            'float64',
-            pyarrow.array([-1.2, None, 1.2], None),
-            pyarrow.array([1.2, None, 1.2], None)
-        )
-
-    def _test_array_udf(self, udf, args, return_type, array, expected):
-        ctx = datafusion.ExecutionContext()
-
-        # write to disk
-        path = write_parquet(os.path.join(self.test_dir, 'a.parquet'), array)
-        ctx.register_parquet("t", path)
-
-        ctx.register_array_udf("udf", udf, args, return_type)
-
-        batches = ctx.sql("SELECT udf(a) AS tt FROM t").collect()
-
-        result = batches[0].column(0)
-
-        self.assertEqual(expected, result)
-
-    def test_array_udf_identity(self):
-        self._test_array_udf(
             lambda x: x,
-            ['float64'],
-            'float64',
+            [pyarrow.float64()],
+            pyarrow.float64(),
             pyarrow.array([-1.2, None, 1.2]),
             pyarrow.array([-1.2, None, 1.2])
         )
 
-    def test_array_udf(self):
-        self._test_array_udf(
+    def test_udf(self):
+        self._test_udf(
             lambda x: x.is_null(),
-            ['float64'],
-            'bool',
+            [pyarrow.float64()],
+            pyarrow.bool_(),
             pyarrow.array([-1.2, None, 1.2]),
             pyarrow.array([False, True, False])
         )

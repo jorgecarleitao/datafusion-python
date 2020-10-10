@@ -1,16 +1,14 @@
 use rand::distributions::Alphanumeric;
 use rand::Rng;
-
-use std::sync::Arc;
+use types::PyDataType;
 
 use pyo3::prelude::*;
 
 use std::collections::HashSet;
 
-use arrow::{datatypes::DataType, record_batch::RecordBatch};
+use arrow::record_batch::RecordBatch;
+use datafusion::datasource::MemTable;
 use datafusion::execution::context::ExecutionContext as _ExecutionContext;
-use datafusion::logical_plan::create_udf;
-use datafusion::{datasource::MemTable, error::ExecutionError};
 
 mod dataframe;
 mod errors;
@@ -86,50 +84,12 @@ impl ExecutionContext {
         &mut self,
         name: &str,
         func: PyObject,
-        args_types: Vec<&str>,
-        return_type: &str,
+        args_types: Vec<PyDataType>,
+        return_type: PyDataType,
     ) -> PyResult<()> {
-        // map strings for declared types to cases from DataType
-        let args_types: Vec<DataType> = errors::wrap(
-            args_types
-                .iter()
-                .map(|x| types::data_type(&x))
-                .collect::<Result<Vec<DataType>, ExecutionError>>(),
-        )?;
-        let return_type = Arc::new(errors::wrap(types::data_type(return_type))?);
+        let function = functions::create_udf(func, args_types, return_type, name)?;
 
-        self.ctx.register_udf(create_udf(
-            name.into(),
-            args_types.clone(),
-            return_type.clone(),
-            udf::udf(func, args_types, return_type),
-        ));
-        Ok(())
-    }
-
-    fn register_array_udf(
-        &mut self,
-        name: &str,
-        func: PyObject,
-        args_types: Vec<&str>,
-        return_type: &str,
-    ) -> PyResult<()> {
-        // map strings for declared types to cases from DataType
-        let args_types: Vec<DataType> = errors::wrap(
-            args_types
-                .iter()
-                .map(|x| types::data_type(&x))
-                .collect::<Result<Vec<DataType>, ExecutionError>>(),
-        )?;
-        let return_type = Arc::new(errors::wrap(types::data_type(return_type))?);
-
-        self.ctx.register_udf(create_udf(
-            name.into(),
-            args_types.clone(),
-            return_type.clone(),
-            udf::array_udf(func, args_types),
-        ));
-        Ok(())
+        Ok(self.ctx.register_udf(function.function))
     }
 
     fn tables(&self) -> HashSet<String> {
@@ -147,10 +107,6 @@ fn datafusion(py: Python, m: &PyModule) -> PyResult<()> {
     let functions = PyModule::new(py, "functions")?;
     functions::init(functions)?;
     m.add_submodule(functions)?;
-
-    for data_type in types::DATA_TYPES {
-        m.add(data_type, *data_type)?;
-    }
 
     Ok(())
 }

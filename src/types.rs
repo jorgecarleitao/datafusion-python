@@ -1,30 +1,26 @@
 use arrow::datatypes::DataType;
-use datafusion::error::ExecutionError;
+use pyo3::{FromPyObject, PyAny, PyResult};
 
 use crate::errors;
 
-pub fn data_type(string: &str) -> Result<DataType, ExecutionError> {
-    match string {
-        "bool" => Ok(DataType::Boolean),
-        "int32" => Ok(DataType::Int32),
-        "int64" => Ok(DataType::Int64),
-        "int" => Ok(DataType::Int64),
-        "float32" => Ok(DataType::Float32),
-        "float64" => Ok(DataType::Float64),
-        "float" => Ok(DataType::Float64),
-        other => Err(ExecutionError::General(format!(
-            "The type {} is not valid",
-            other
-        ))),
+/// utility struct to convert PyObj to native DataType
+#[derive(Debug, Clone)]
+pub struct PyDataType {
+    pub data_type: DataType,
+}
+
+impl<'source> FromPyObject<'source> for PyDataType {
+    fn extract(ob: &'source PyAny) -> PyResult<Self> {
+        let id = ob.getattr("id")?.extract::<i32>()?;
+        let data_type = data_type_id(&id)?;
+        Ok(PyDataType { data_type })
     }
 }
 
-pub const DATA_TYPES: &'static [&'static str] = &[
-    "bool", "int32", "int64", "int", "float32", "float64", "float",
-];
-
-pub fn data_type_id(id: &i32) -> Result<DataType, errors::DataFusionError> {
+fn data_type_id(id: &i32) -> Result<DataType, errors::DataFusionError> {
     // see https://github.com/apache/arrow/blob/3694794bdfd0677b95b8c95681e392512f1c9237/python/pyarrow/includes/libarrow.pxd
+    // this is not ideal as it does not generalize for non-basic types
+    // Find a way to get a unique name from the pyarrow.DataType
     Ok(match id {
         1 => DataType::Boolean,
         2 => DataType::UInt8,

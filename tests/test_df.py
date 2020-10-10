@@ -57,3 +57,13 @@ class TestCase(unittest.TestCase):
 
         self.assertEqual(len(result.column(0)), 1)
         self.assertEqual(len(result.column(1)), 1)
+
+    def test_udf(self):
+        df = self._prepare()
+
+        # is_null is a pyspark function over arrays
+        udf = f.udf(lambda x: x.is_null(), [pyarrow.int64()], pyarrow.bool_())
+
+        df = df.select(udf(f.col("a")))
+
+        self.assertEqual(df.collect()[0].column(0), pyarrow.array([False, False, False]))
