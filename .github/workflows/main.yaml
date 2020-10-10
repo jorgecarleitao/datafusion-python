@@ -1,0 +1,19 @@
+on: [push]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+
+    - uses: satackey/action-docker-layer-caching@v0.0.8
+      # Ignore the failure of a step and avoid terminating the job.
+      continue-on-error: true
+
+    - name: Run tests
+      run: |
+        docker build -t test .
+        docker run --rm -t test
+
+# release manylinux: docker run --rm -it -v $(pwd):/io konstin2/maturin build
+# release macOS: 

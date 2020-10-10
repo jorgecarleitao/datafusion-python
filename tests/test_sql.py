@@ -11,7 +11,7 @@ import datafusion
 # used to write parquet files
 import pyarrow.parquet
 
-from .generic import *
+from tests.generic import *
 
 
 class TestCase(unittest.TestCase):
