@@ -39,7 +39,7 @@ class TestCase(unittest.TestCase):
                 f.col("a") + f.col("b"),
                 f.col("a") - f.col("b"),
             ) \
-            .filter(f.col("a").gt(f.lit(2)))
+            .filter(f.col("a") > f.lit(2))
 
         # execute and collect the first (and only) batch
         result = df.collect()[0]

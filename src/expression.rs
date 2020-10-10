@@ -1,4 +1,4 @@
-use pyo3::{prelude::*, types::PyTuple, PyNumberProtocol};
+use pyo3::{basic::CompareOp, prelude::*, types::PyTuple, PyNumberProtocol, PyObjectProtocol};
 
 use datafusion::logical_plan::Expr as _Expr;
 use datafusion::physical_plan::udf::ScalarUDF as _ScalarUDF;
@@ -63,16 +63,34 @@ impl PyNumberProtocol for Expression {
     }
 }
 
+#[pyproto]
+impl PyObjectProtocol for Expression {
+    fn __richcmp__(&self, other: Expression, op: CompareOp) -> Expression {
+        match op {
+            CompareOp::Lt => Expression {
+                expr: self.expr.lt(other.expr),
+            },
+            CompareOp::Le => Expression {
+                expr: self.expr.lt_eq(other.expr),
+            },
+            CompareOp::Eq => Expression {
+                expr: self.expr.eq(other.expr),
+            },
+            CompareOp::Ne => Expression {
+                expr: self.expr.not_eq(other.expr),
+            },
+            CompareOp::Gt => Expression {
+                expr: self.expr.gt(other.expr),
+            },
+            CompareOp::Ge => Expression {
+                expr: self.expr.gt_eq(other.expr),
+            },
+        }
+    }
+}
+
 #[pymethods]
 impl Expression {
-    /// operator ">"
-    // these are here until https://github.com/PyO3/pyo3/issues/1219 is closed and released
-    pub fn gt(&self, rhs: Expression) -> PyResult<Expression> {
-        Ok(Expression {
-            expr: self.expr.gt(rhs.expr),
-        })
-    }
-
     /// assign a name to the expression
     pub fn alias(&self, name: &str) -> PyResult<Expression> {
         Ok(Expression {
