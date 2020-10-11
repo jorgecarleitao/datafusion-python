@@ -1,6 +1,6 @@
 [package]
 name = "datafusion"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Jorge C. Leitao <jorgecarleitao@gmail.com>"]
 description = "Build and run queries against data"
 readme = "README.md"
