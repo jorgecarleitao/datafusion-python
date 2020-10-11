@@ -20,6 +20,7 @@ RUN pip install pyarrow==1.0.0
 
 RUN rm -rf src
 COPY src src
+COPY README.md README.md
 
 RUN maturin develop
 
