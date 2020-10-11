@@ -44,10 +44,12 @@ assert result.column(1) == pyarrow.array([-3, -3, -3])
 UDF usage:
 
 ```python
-# name, function, input types, output types
-ctx.register_udf('my_abs', lambda x: abs(x), ['float64'], 'float64')
+def is_null(array: pyarrow.Array) -> pyarrow.Array:
+    return array.is_null()
 
-result = ctx.sql("SELECT my_abs(a) FROM t")
+udf = f.udf(is_null, [pyarrow.int64()], pyarrow.bool_())
+
+df = df.select(udf(f.col("a")))
 ```
 
 ## How to install
