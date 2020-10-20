@@ -5,7 +5,7 @@ It allows you to build a Logical Plan through a DataFrame API against parquet or
 
 Being written in rust, this code has strong assumptions about thread safety and lack of memory leaks.
 
-We lock the GIL to convert the results back to pyarrow arrays and to run UFDs.
+We lock the GIL to convert the results back to pyarrow arrays and to run UDFs.
 
 ## How to use it
 
