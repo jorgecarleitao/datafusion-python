@@ -1,6 +1,7 @@
 use pyo3::{basic::CompareOp, prelude::*, types::PyTuple, PyNumberProtocol, PyObjectProtocol};
 
 use datafusion::logical_plan::Expr as _Expr;
+use datafusion::physical_plan::udaf::AggregateUDF as _AggregateUDF;
 use datafusion::physical_plan::udf::ScalarUDF as _ScalarUDF;
 
 /// An expression that can be used on a DataFrame
@@ -108,6 +109,27 @@ pub struct ScalarUDF {
 
 #[pymethods]
 impl ScalarUDF {
+    /// creates a new expression with the call of the udf
+    #[call]
+    #[args(args = "*")]
+    fn __call__(&self, args: &PyTuple) -> PyResult<Expression> {
+        let args = from_tuple(args)?.iter().map(|e| e.expr.clone()).collect();
+
+        Ok(Expression {
+            expr: self.function.call(args),
+        })
+    }
+}
+
+/// Represents a AggregateUDF
+#[pyclass]
+#[derive(Debug, Clone)]
+pub struct AggregateUDF {
+    pub(crate) function: _AggregateUDF,
+}
+
+#[pymethods]
+impl AggregateUDF {
     /// creates a new expression with the call of the udf
     #[call]
     #[args(args = "*")]

@@ -5,9 +5,11 @@ mod dataframe;
 mod errors;
 mod expression;
 mod functions;
+mod scalar;
 mod to_py;
 mod to_rust;
 mod types;
+mod udaf;
 mod udf;
 
 /// DataFusion.

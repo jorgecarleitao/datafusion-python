@@ -54,6 +54,25 @@ impl DataFrame {
         })
     }
 
+    /// Aggregates using expressions
+    fn aggregate(
+        &self,
+        group_by: Vec<expression::Expression>,
+        aggs: Vec<expression::Expression>,
+    ) -> PyResult<Self> {
+        let builder = LogicalPlanBuilder::from(&self.plan);
+        let builder = errors::wrap(builder.aggregate(
+            group_by.iter().map(|e| e.expr.clone()).collect(),
+            aggs.iter().map(|e| e.expr.clone()).collect(),
+        ))?;
+        let plan = errors::wrap(builder.build())?;
+
+        Ok(DataFrame {
+            ctx_state: self.ctx_state.clone(),
+            plan,
+        })
+    }
+
     /// Limits the plan to return at most `count` rows
     fn limit(&self, count: usize) -> PyResult<Self> {
         let builder = LogicalPlanBuilder::from(&self.plan);
