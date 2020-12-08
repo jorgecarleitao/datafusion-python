@@ -13,7 +13,6 @@ import pyarrow.parquet
 
 
 def data():
-    numpy.random.seed(1)
     data = numpy.concatenate([
         numpy.random.normal(0, 0.01, size=50),
         numpy.random.normal(50, 0.01, size=50)

@@ -87,9 +87,7 @@ impl DataFrame {
 
     /// Executes the plan, returning a list of `RecordBatch`es.
     /// Unless some order is specified in the plan, there is no guarantee of the order of the result
-    fn collect(&self) -> PyResult<PyObject> {
-        let mut rt = Runtime::new().unwrap();
-
+    fn collect(&self, py: Python) -> PyResult<PyObject> {
         let ctx = _ExecutionContext::from(self.ctx_state.clone());
         let plan = ctx
             .optimize(&self.plan)
@@ -98,10 +96,13 @@ impl DataFrame {
             .create_physical_plan(&plan)
             .map_err(|e| -> errors::DataFusionError { e.into() })?;
 
-        let batches = rt.block_on(async {
-            ctx.collect(plan)
-                .await
-                .map_err(|e| -> errors::DataFusionError { e.into() })
+        let mut rt = Runtime::new().unwrap();
+        let batches = py.allow_threads(|| {
+            rt.block_on(async {
+                ctx.collect(plan)
+                    .await
+                    .map_err(|e| -> errors::DataFusionError { e.into() })
+            })
         })?;
         to_py::to_py(&batches)
     }

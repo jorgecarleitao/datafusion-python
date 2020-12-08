@@ -5,13 +5,11 @@ use pyo3::{prelude::*, types::PyTuple};
 use arrow::array;
 
 use datafusion::error::Result;
-use datafusion::{error::ExecutionError, physical_plan::Accumulator};
+use datafusion::{error::DataFusionError as InnerDataFusionError, physical_plan::Accumulator};
 
 use crate::scalar::Scalar;
 use crate::to_py::to_py_array;
 use crate::to_rust::to_rust_scalar;
-
-type A = Arc<dyn Fn() -> Result<Box<dyn Accumulator>> + Send + Sync>;
 
 #[derive(Debug)]
 struct PyAccumulator {
@@ -33,9 +31,9 @@ impl Accumulator for PyAccumulator {
             .accum
             .as_ref(py)
             .call_method0("to_scalars")
-            .map_err(|e| ExecutionError::from(format!("{}", e)))?
+            .map_err(|e| InnerDataFusionError::Execution(format!("{}", e)))?
             .extract::<Vec<Scalar>>()
-            .map_err(|e| ExecutionError::from(format!("{}", e)))?;
+            .map_err(|e| InnerDataFusionError::Execution(format!("{}", e)))?;
 
         Ok(state.into_iter().map(|v| v.scalar).collect::<Vec<_>>())
     }
@@ -59,9 +57,9 @@ impl Accumulator for PyAccumulator {
             .accum
             .as_ref(py)
             .call_method0("evaluate")
-            .map_err(|e| ExecutionError::from(format!("{}", e)))?;
+            .map_err(|e| InnerDataFusionError::Execution(format!("{}", e)))?;
 
-        to_rust_scalar(value).map_err(|e| ExecutionError::from(format!("{}", e)))
+        to_rust_scalar(value).map_err(|e| InnerDataFusionError::Execution(format!("{}", e)))
     }
 
     fn update_batch(&mut self, values: &Vec<array::ArrayRef>) -> Result<()> {
@@ -86,7 +84,7 @@ impl Accumulator for PyAccumulator {
         self.accum
             .as_ref(py)
             .call_method1("update", py_args)
-            .map_err(|e| ExecutionError::from(format!("{}", e)))?;
+            .map_err(|e| InnerDataFusionError::Execution(format!("{}", e)))?;
 
         Ok(())
     }
@@ -100,27 +98,30 @@ impl Accumulator for PyAccumulator {
         // 2. merge
         let state = &states[0];
 
-        let state = to_py_array(state, py).map_err(|e| ExecutionError::from(format!("{}", e)))?;
+        let state = to_py_array(state, py)
+            .map_err(|e| InnerDataFusionError::Execution(format!("{}", e)))?;
 
         // 2.
         self.accum
             .as_ref(py)
             .call_method1("merge", (state,))
-            .map_err(|e| ExecutionError::from(format!("{}", e)))?;
+            .map_err(|e| InnerDataFusionError::Execution(format!("{}", e)))?;
 
         Ok(())
     }
 }
 
-pub fn array_udaf(accumulator: PyObject) -> A {
+pub fn array_udaf(
+    accumulator: PyObject,
+) -> Arc<dyn Fn() -> Result<Box<dyn Accumulator>> + Send + Sync> {
+    let accumulator = accumulator.clone();
     Arc::new(move || -> Result<Box<dyn Accumulator>> {
-        // get GIL
         let gil = pyo3::Python::acquire_gil();
         let py = gil.python();
 
         let accumulator = accumulator
             .call0(py)
-            .map_err(|e| ExecutionError::from(format!("{}", e)))?;
+            .map_err(|e| InnerDataFusionError::Execution(format!("{}", e)))?;
         Ok(Box::new(PyAccumulator::new(accumulator)))
     })
 }

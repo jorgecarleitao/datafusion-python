@@ -19,6 +19,7 @@ class TestCase(unittest.TestCase):
     def setUp(self):
         # Create a temporary directory
         self.test_dir = tempfile.mkdtemp()
+        numpy.random.seed(1)
 
     def tearDown(self):
         # Remove the directory after the test
@@ -38,37 +39,45 @@ class TestCase(unittest.TestCase):
         self.assertEqual(ctx.tables(), {"t"})
 
     def test_execute(self):
+        data = [
+            1, 1, 2, 2, 3, 11, 12
+        ]
+
         ctx = datafusion.ExecutionContext()
 
         # single column, "a"
-        path = write_parquet(os.path.join(self.test_dir, 'a.parquet'), data())
+        path = write_parquet(os.path.join(self.test_dir, 'a.parquet'), pyarrow.array(data))
         ctx.register_parquet("t", path)
 
         self.assertEqual(ctx.tables(), {"t"})
 
         # count
-        expected = pyarrow.array([100], pyarrow.uint64())
+        result = ctx.sql("SELECT COUNT(a) FROM t").collect()
+
+        expected = pyarrow.array([7], pyarrow.uint64())
         expected = [pyarrow.RecordBatch.from_arrays([expected], ['COUNT(a)'])]
-        self.assertEqual(expected, ctx.sql("SELECT COUNT(a) FROM t").collect())
+        self.assertEqual(expected, result)
 
         # where
-        expected = pyarrow.array([50], pyarrow.uint64())
+        expected = pyarrow.array([2], pyarrow.uint64())
         expected = [pyarrow.RecordBatch.from_arrays([expected], ['COUNT(a)'])]
         self.assertEqual(expected, ctx.sql("SELECT COUNT(a) FROM t WHERE a > 10").collect())
 
         # group by
         result = ctx.sql("SELECT CAST(a as int), COUNT(a) FROM t GROUP BY CAST(a as int)").collect()
 
-        expected_cast = pyarrow.array([50,  0, 49], pyarrow.int32())
-        expected_count = pyarrow.array([31, 50, 19], pyarrow.uint64())
-        expected = [pyarrow.RecordBatch.from_arrays([expected_cast, expected_count], ['CAST(a as Int32)', 'COUNT(a)'])]
-        numpy.testing.assert_equal(expected, result)
+        result_keys = result[0].to_pydict()['CAST(a AS Int32)']
+        result_values = result[0].to_pydict()['COUNT(a)']
+        result_keys, result_values = (list(t) for t in zip(*sorted(zip(result_keys, result_values))))
+
+        self.assertEqual(result_keys, [1, 2, 3, 11, 12])
+        self.assertEqual(result_values, [2, 2, 1, 1, 1])
 
         # order by
         result = ctx.sql("SELECT a, CAST(a AS int) FROM t ORDER BY a DESC LIMIT 2").collect()
         expected_a = pyarrow.array([50.0219, 50.0152], pyarrow.float64())
         expected_cast = pyarrow.array([50, 50], pyarrow.int32())
-        expected = [pyarrow.RecordBatch.from_arrays([expected_a, expected_cast], ['a', 'CAST(a as Int32)'])]
+        expected = [pyarrow.RecordBatch.from_arrays([expected_a, expected_cast], ['a', 'CAST(a AS Int32)'])]
         numpy.testing.assert_equal(expected[0].column(1), expected[0].column(1))
 
     def test_cast(self):

@@ -1,12 +1,12 @@
 use core::fmt;
 
 use arrow::error::ArrowError;
-use datafusion::error::ExecutionError;
+use datafusion::error::DataFusionError as InnerDataFusionError;
 use pyo3::{exceptions, PyErr};
 
 #[derive(Debug)]
 pub enum DataFusionError {
-    ExecutionError(ExecutionError),
+    ExecutionError(InnerDataFusionError),
     ArrowError(ArrowError),
     Common(String),
 }
@@ -27,8 +27,8 @@ impl From<DataFusionError> for PyErr {
     }
 }
 
-impl From<ExecutionError> for DataFusionError {
-    fn from(err: ExecutionError) -> DataFusionError {
+impl From<InnerDataFusionError> for DataFusionError {
+    fn from(err: InnerDataFusionError) -> DataFusionError {
         DataFusionError::ExecutionError(err)
     }
 }
@@ -39,6 +39,6 @@ impl From<ArrowError> for DataFusionError {
     }
 }
 
-pub(crate) fn wrap<T>(a: Result<T, ExecutionError>) -> Result<T, DataFusionError> {
+pub(crate) fn wrap<T>(a: Result<T, InnerDataFusionError>) -> Result<T, DataFusionError> {
     Ok(a?)
 }
