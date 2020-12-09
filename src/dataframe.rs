@@ -1,26 +1,29 @@
+use std::sync::{Arc, Mutex};
+
 use logical_plan::LogicalPlan;
 use pyo3::{prelude::*, types::PyTuple};
 use tokio::runtime::Runtime;
 
 use datafusion::execution::context::ExecutionContext as _ExecutionContext;
-use datafusion::logical_plan::LogicalPlanBuilder;
+use datafusion::logical_plan::{JoinType, LogicalPlanBuilder};
+use datafusion::physical_plan::collect;
 use datafusion::{execution::context::ExecutionContextState, logical_plan};
 
-use crate::expression;
 use crate::{errors, to_py};
+use crate::{errors::DataFusionError, expression};
 
 /// A DataFrame is a representation of a logical plan and an API to compose statements.
 /// Use it to build a plan and `.collect()` to execute the plan and collect the result.
 /// The actual execution of a plan runs natively on Rust and Arrow on a multi-threaded environment.
-#[pyclass(unsendable)]
+#[pyclass]
 pub(crate) struct DataFrame {
-    ctx_state: ExecutionContextState,
+    ctx_state: Arc<Mutex<ExecutionContextState>>,
     plan: LogicalPlan,
 }
 
 impl DataFrame {
     /// creates a new DataFrame
-    pub fn new(ctx_state: ExecutionContextState, plan: LogicalPlan) -> Self {
+    pub fn new(ctx_state: Arc<Mutex<ExecutionContextState>>, plan: LogicalPlan) -> Self {
         Self { ctx_state, plan }
     }
 }
@@ -99,11 +102,39 @@ impl DataFrame {
         let mut rt = Runtime::new().unwrap();
         let batches = py.allow_threads(|| {
             rt.block_on(async {
-                ctx.collect(plan)
+                collect(plan)
                     .await
                     .map_err(|e| -> errors::DataFusionError { e.into() })
             })
         })?;
         to_py::to_py(&batches)
+    }
+
+    /// Returns the join of two DataFrames `on`.
+    fn join(&self, right: &DataFrame, on: Vec<&str>, how: &str) -> PyResult<Self> {
+        let builder = LogicalPlanBuilder::from(&self.plan);
+
+        let join_type = match how {
+            "inner" => JoinType::Inner,
+            "left" => JoinType::Left,
+            "right" => JoinType::Right,
+            how => {
+                return Err(DataFusionError::Common(format!(
+                    "The join type {} does not exist or is not implemented",
+                    how
+                ))
+                .into())
+            }
+        };
+
+        let builder =
+            errors::wrap(builder.join(&right.plan, join_type, on.as_slice(), on.as_slice()))?;
+
+        let plan = errors::wrap(builder.build())?;
+
+        Ok(DataFrame {
+            ctx_state: self.ctx_state.clone(),
+            plan,
+        })
     }
 }

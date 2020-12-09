@@ -67,3 +67,32 @@ class TestCase(unittest.TestCase):
         df = df.select(udf(f.col("a")))
 
         self.assertEqual(df.collect()[0].column(0), pyarrow.array([False, False, False]))
+
+    def test_join(self):
+        ctx = datafusion.ExecutionContext()
+
+        batch = pyarrow.RecordBatch.from_arrays(
+            [pyarrow.array([1, 2, 3]), pyarrow.array([4, 5, 6])],
+            names=["a", "b"],
+        )
+        df = ctx.create_dataframe([[batch]])
+
+        batch = pyarrow.RecordBatch.from_arrays(
+            [pyarrow.array([1, 2]), pyarrow.array([8, 10])],
+            names=["a", "c"],
+        )
+        df1 = ctx.create_dataframe([[batch]])
+
+        df = df.join(df1, on="a", how="inner")
+
+        # execute and collect the first (and only) batch
+        batch = df.collect()[0]
+
+        if batch.column(0) == pyarrow.array([1, 2]):
+            self.assertEqual(batch.column(0), pyarrow.array([1, 2]))
+            self.assertEqual(batch.column(1), pyarrow.array([4, 5]))
+            self.assertEqual(batch.column(2), pyarrow.array([8, 10]))
+        else:
+            self.assertEqual(batch.column(0), pyarrow.array([2, 1]))
+            self.assertEqual(batch.column(1), pyarrow.array([5, 4]))
+            self.assertEqual(batch.column(2), pyarrow.array([10, 8]))
