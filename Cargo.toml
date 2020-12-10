@@ -1,6 +1,6 @@
 [package]
 name = "datafusion"
-version = "0.1.2"
+version = "0.2.0"
 authors = ["Jorge C. Leitao <jorgecarleitao@gmail.com>"]
 description = "Build and run queries against data"
 readme = "README.md"
@@ -20,7 +20,7 @@ name = "datafusion"
 crate-type = ["cdylib"]
 
 [package.metadata.maturin]
-requires-dist = ["pyarrow>=1,<2"]
+requires-dist = ["pyarrow>=1"]
 
 classifier = [
     "Development Status :: 2 - Pre-Alpha",
