@@ -1,6 +1,6 @@
 [package]
 name = "datafusion"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["Jorge C. Leitao <jorgecarleitao@gmail.com>"]
 description = "Build and run queries against data"
 readme = "README.md"
@@ -12,8 +12,8 @@ edition = "2018"
 tokio = "0.2.22"
 rand = "0.7"
 pyo3 = { version = "0.12.1", features = ["extension-module"] }
-datafusion = { git = "https://github.com/jorgecarleitao/arrow.git", rev = "147aae4" }
-arrow = { git = "https://github.com/jorgecarleitao/arrow.git", rev = "147aae4" }
+datafusion = { git = "https://github.com/jorgecarleitao/arrow.git", rev = "147aae4", features = ["simd"] }
+arrow = { git = "https://github.com/jorgecarleitao/arrow.git", rev = "147aae4", features = ["simd"] }
 
 [lib]
 name = "datafusion"
