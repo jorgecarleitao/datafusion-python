@@ -1,11 +1,16 @@
-## Datafusion with Python
+## DataFusion in Python
 
-This is a Python library that binds to Apache's Arrow in-memory rust-based query engine [datafusion](https://github.com/apache/arrow/tree/master/rust/datafusion).
-It allows you to build a Logical Plan through a DataFrame API against parquet or CSV files, and obtain the result back.
+This is a Python library that binds to [Apache Arrow](https://arrow.apache.org/) in-memory query engine [DataFusion](https://github.com/apache/arrow/tree/master/rust/datafusion).
 
-Being written in rust, this code has strong assumptions about thread safety and lack of memory leaks.
+Like pyspark, it allows you to build a plan through SQL or a DataFrame API against in-memory data, parquet or CSV files, run it in a multi-threaded environment, and obtain the result back in Python.
 
-We lock the GIL to convert the results back to pyarrow arrays and to run UDFs.
+It also allows you to use UDFs and UDAFs for complex operations.
+
+The major advantage of this library over other execution engines is that this library achieves zero-copy between Python and its execution engine: there is no cost in using UDFs, UDAFs, and collecting the results to Python apart from having to lock the GIL when running those operations.
+
+Its query engine, DataFusion, is written in [Rust](https://www.rust-lang.org/), which makes strong assumptions about thread safety and lack of memory leaks.
+
+Technically, zero-copy is achieved via the [c data interface](https://arrow.apache.org/docs/format/CDataInterface.html).
 
 ## How to use it
 
