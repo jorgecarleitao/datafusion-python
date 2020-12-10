@@ -22,8 +22,7 @@ jobs:
 
       - uses: actions-rs/toolchain@v1
         with:
-          toolchain: nightly-2020-04-22
-          override: true
+          toolchain: nightly-2020-11-24
 
       - name: Install dependencies
         run: |
