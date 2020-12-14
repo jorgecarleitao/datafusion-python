@@ -27,6 +27,48 @@ fn lit(value: i32) -> expression::Expression {
     }
 }
 
+#[pyfunction]
+fn sum(value: expression::Expression) -> expression::Expression {
+    expression::Expression {
+        expr: logical_plan::sum(value.expr),
+    }
+}
+
+#[pyfunction]
+fn avg(value: expression::Expression) -> expression::Expression {
+    expression::Expression {
+        expr: logical_plan::avg(value.expr),
+    }
+}
+
+#[pyfunction]
+fn min(value: expression::Expression) -> expression::Expression {
+    expression::Expression {
+        expr: logical_plan::min(value.expr),
+    }
+}
+
+#[pyfunction]
+fn max(value: expression::Expression) -> expression::Expression {
+    expression::Expression {
+        expr: logical_plan::max(value.expr),
+    }
+}
+
+#[pyfunction]
+fn count(value: expression::Expression) -> expression::Expression {
+    expression::Expression {
+        expr: logical_plan::count(value.expr),
+    }
+}
+
+#[pyfunction]
+fn concat(value: Vec<expression::Expression>) -> expression::Expression {
+    expression::Expression {
+        expr: logical_plan::concat(value.into_iter().map(|e| e.expr).collect()),
+    }
+}
+
 pub(crate) fn create_udf(
     fun: PyObject,
     input_types: Vec<PyDataType>,
@@ -85,7 +127,13 @@ fn udaf(
 pub fn init(module: &PyModule) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(col, module)?)?;
     module.add_function(wrap_pyfunction!(lit, module)?)?;
+    module.add_function(wrap_pyfunction!(concat, module)?)?;
     module.add_function(wrap_pyfunction!(udf, module)?)?;
+    module.add_function(wrap_pyfunction!(sum, module)?)?;
+    module.add_function(wrap_pyfunction!(count, module)?)?;
+    module.add_function(wrap_pyfunction!(min, module)?)?;
+    module.add_function(wrap_pyfunction!(max, module)?)?;
+    module.add_function(wrap_pyfunction!(avg, module)?)?;
     module.add_function(wrap_pyfunction!(udaf, module)?)?;
     Ok(())
 }
