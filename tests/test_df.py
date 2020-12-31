@@ -90,9 +90,9 @@ class TestCase(unittest.TestCase):
 
         if batch.column(0) == pyarrow.array([1, 2]):
             self.assertEqual(batch.column(0), pyarrow.array([1, 2]))
-            self.assertEqual(batch.column(1), pyarrow.array([4, 5]))
-            self.assertEqual(batch.column(2), pyarrow.array([8, 10]))
+            self.assertEqual(batch.column(1), pyarrow.array([8, 10]))
+            self.assertEqual(batch.column(2), pyarrow.array([4, 5]))
         else:
             self.assertEqual(batch.column(0), pyarrow.array([2, 1]))
-            self.assertEqual(batch.column(1), pyarrow.array([5, 4]))
-            self.assertEqual(batch.column(2), pyarrow.array([10, 8]))
+            self.assertEqual(batch.column(1), pyarrow.array([10, 8]))
+            self.assertEqual(batch.column(2), pyarrow.array([5, 4]))
